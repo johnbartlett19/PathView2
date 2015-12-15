@@ -1,26 +1,115 @@
-import requests, datetime, webbrowser
-from ip_address import *
-#TODO build app to search for paths based on portion of path name, provide path ID and names in list
-#TODO build function to open diags that occurred in given time window
-pvc = 'https://polycom.pathviewcloud.com'
+import requests, datetime, webbrowser, sys
+import windows as w
+import urllib3
+import certifi
+
+http = urllib3.PoolManager(
+    cert_reqs = 'CERT_REQUIRED', #Force certificate check
+    ca_certs=certifi.where(),  # Path to the Certifi bundle
+)
+2
+
+'''
+API Documentation here:
+https://polycom.pathviewcloud.com/pvc-data/swagger/#
+'''
+
+# These definitions point at a cloud and a user/password that allows access to that cloud
+# pvc = 'https://polycom.pathviewcloud.com'
 #user = 'test_api_access' # this one for Polycom IT only
 #password = 'M8bxA1$WZ1*b'
-user = 'Polycom_api'   # This one for all accounts
-password = 'johnbartlett12'
 
-def get_all_paths(pvc, user, password):
+class Path():
     """
-    fetch all path info for cloud pvc
-    @param pvc: url for cloud (e.g. 'https://polycom.pathviewcloud.com'
-    @param user: username for cloud credentials
-    @param password: password for cloud credentials
-    @return: list of path objects, one for each path, json format (list of Dicts)
+    This class represents a PathView path.  Upon creation pass in a dictionary that includes:
+     pathName:'Path Name'
+     target:'Target IP address'
+     pathId: 'Path ID value'
+     organization: 'Org to which the path belongs'
     """
-    #payload = {'Accept': 'application/json'}
-    paths = requests.get(pvc + "/pvc-ws/v1/paths", auth=(user, password))
-    return paths.json()
+    def __init__(self, path_dict):
+        self.dict = path_dict
+        self.pathName = path_dict['pathName']
+        self.ip = path_dict['target']
+        self.id = path_dict['id']
+        self.orgId = path_dict['orgId']
+    def __repr__(self):
+        return self.pathName
 
-def get_one_path(pvc, user, password, pathid):
+class Org():
+    """
+    Build class representing each Org to cross reference ID and name as needed
+    """
+    def __init__(self, json_array):
+        self.dict = json_array
+        self.name = self.dict['displayName']
+        self.id = self.dict['id']
+    def __repr__(self):
+        return self.name
+
+class Org_list():
+    def __init__(self, pvc, user, password):
+        try:
+            org_raw = requests.get(pvc + '/pvc-data/v2/organization', auth=(user,password)).json()
+            self.org_list = []
+            for org_dict in org_raw:
+                self.org_list.append(Org(org_dict))
+        except requests.exceptions.Timeout:
+            # Maybe set up for a retry, or continue in a retry loop
+            print 'Network timeout, what is going on?'
+            sys.exit(1)
+        except requests.exceptions.TooManyRedirects:
+            # Tell the user their URL was bad and try a different one
+            print'Bad URL, try another?'
+            sys.exit(1)
+        except requests.exceptions.RequestException as e:
+            # catastrophic error. bail.
+            print e
+            sys.exit(1)
+
+class Alert():
+    """
+    Build class representing each Org to cross reference ID and name as needed
+    """
+    def __init__(self, json_array):
+        self.dict = json_array
+        self.name = self.dict['name']
+        self.id = self.dict['id']
+    def __repr__(self):
+        return self.name
+
+class Alert_list():
+    def __init__(self, org, pvc, user, password):
+        org_info = {'orgId':org.id}
+        try:
+            alert_raw = requests.get(pvc + '/pvc-data/v2/alertProfile', params=org_info, auth=(user,password)).json()
+            self.alert_list = []
+            for alert_dict in alert_raw:
+                self.alert_list.append(Alert(alert_dict))
+        except requests.exceptions.Timeout:
+            # Maybe set up for a retry, or continue in a retry loop
+            print 'Network timeout, what is going on?'
+            sys.exit(1)
+        except requests.exceptions.TooManyRedirects:
+            # Tell the user their URL was bad and try a different one
+            print'Bad URL, try another?'
+            sys.exit(1)
+        except requests.exceptions.RequestException as e:
+            # catastrophic error. bail.
+            print e
+            sys.exit(1)
+
+def requests_logging():
+    import httplib, logging
+    httplib.HTTPConnection.debuglevel = 1
+    # You must initialize logging, otherwise you'll not see debug output.
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.DEBUG)
+    requests_log = logging.getLogger("requests.packages.urllib3")
+    requests_log.setLevel(logging.DEBUG)
+    requests_log.propagate = True
+
+def get_path(pvc, user, password, pathid, org_set):
     """
     fetch path info for one path based on pathid
     @param pvc: url for cloud (e.g. 'https://polycom.pathviewcloud.com'
@@ -29,44 +118,74 @@ def get_one_path(pvc, user, password, pathid):
     @param pathid: numerical path ID for requested path
     @return: path object, json format (Dict)
     """
-    payload = {'Accept': 'application/json'}
-    pvcquery = requests.get(pvc + '/pvc-ws/v1/paths/' + str(pathid), auth=(user, password))
-    return [pvcquery.json()]
+    try:
+        return Path(requests.get(pvc + '/pvc-ws/v1/paths/' + str(pathid), auth=(user,password)).json(), org_set, user, password)
+    except requests.exceptions.Timeout:
+        # Maybe set up for a retry, or continue in a retry loop
+        print 'Network timeout, what is going on?'
+        sys.exit(1)
+    except requests.exceptions.TooManyRedirects:
+        # Tell the user their URL was bad and try a different one
+        print'Bad URL, try another?'
+        sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        # catastrophic error. bail.
+        print e
+        sys.exit(1)
 
-def get_paths_org(pvc, user, password, org):
+def get_path_param(pvc, user, password, path, measure):
+    return requests.get(pvc + '/pvc-ws/v1/paths/' + str(path.id) + '/data/' + measure, auth=(user, password)).json()
+
+def get_paths(pvc, user, password, org, target=None, filters=None):
     """
-    get list of paths for specific org
-    @param pvc: url for cloud (e.g. 'https://polycom.pathviewcloud.com'
+    get list of paths for specific org.
     @param user: username for cloud credentials
     @param password: password for cloud credentials
-    @param org: organization within cloud to search
-    @return: list of path objects, json format
+    @param org_name: organization within cloud to search by org name
+    @param org_id: organization within cloud to search by org id
+    @filters: dict of filters to apply to the search
+    @return: list of paths (class Path)
     """
-    #paths = get_all_paths(pvc, user, password)
-    paths = requests.get(pvc + "/pvc-ws/v1/paths", auth=(user, password), params = {'organization':org})
-    return paths.json()
-
-def paths_by_target_ip(pvc, user, password, target):
-    """
-    find list of paths with common IP target
-    @param pvc:
-    @param user:
-    @param password:
-    @param target:
-    @return:
-    """
-    #TODO expand this to take wild cards
-    paths = get_all_paths(pvc, user, password)
-    retList = []
+    payload = filters
+    payload['orgId'] = org.id
+    if target != None:
+        payload['target'] = target
+    page = 1
+    paths = []
+    while(1):
+        payload['page'] = page
+        path_page = requests.get(pvc + "/pvc-data/v2/path", params=payload, auth=(user, password), verify=False).json()
+        paths += path_page
+        if len(path_page) < 100:
+            break
+        page += 1
+    path_set = []
     for path in paths:
-        if path['target'] == target:
-            retList.append(path)
-    return retList
+        path_set.append(Path(path))
+    return path_set
+
+def get_org_id(org_name, org_set):
+    return org_set.org_codes[org_name]
+
+def open_org(org, pvc):
+    base = pvc + '/pvc/welcome.html'
+    args = {}
+    args['st'] = str(org.id)
+    url = form_url(base, args)
+    open_web(url)
 
 def form_url(base, args):
+    """
+    create a path URL to open a path view in browser
+    args may include start and end times
+    args in dictionary format
+    @param base: base URL info including pathview cloud URL and 'path'
+    @param args: dictionary of arguments to add to URL
+    @return: string - URL fully formed
+    """
     arg_str = ''
     for arg in args:
-        arg_str = arg_str + '&' + arg
+        arg_str = arg_str + '&' + arg + '=' + str(args[arg])
     arg_str = arg_str[1:]
     if len(arg_str) > 0:
         url = base + '?' + arg_str
@@ -74,68 +193,65 @@ def form_url(base, args):
         url = base
     return url
 
-def form_url2(base, args):
-    arg_str = ''
-    for arg in args:
-        arg_str = arg_str + '&' + arg + '=' + args[arg]
-    arg_str = arg_str[1:]
-    if len(arg_str) > 0:
-        url = base + '?' + arg_str
-    else:
-        url = base
+def create_url_diag(pvc, orgId, diag_id, tab=0):
+    url = pvc + '/pvc/emberview/testdetail/test/' + str(diag_id) + '/data'
+    # args = {}
+    # args['st'] = str(orgId)
+    # args['testid'] = str(diag_id)
+    # args['activeTabTest'] = str(tab)
+    # url = form_url(base, args)
+    # https://polycom.pathviewcloud.com/pvc/emberview/testdetail/test/3576135/summary
+    # https://polycom.pathviewcloud.com/pvc/emberview/testdetail/test/3576135/data
+
     return url
+
+def create_url_path(pvc, path, start=None, end=None):
+    """
+    create a deep link url that will open a page for the specific start/end time window
+    https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2590&pathid=10891&startDate=1448480802328&endDate=1449863659586&loadSeqTz=false
+
+    @param path: path object (Dict)
+    @param start: start time in unix seconds
+    @param end: end time in unix seconds
+    @return: url string
+    """
+    url_base = pvc +  '/pvc/pathdetail.html'
+    newPathDict = {}
+    if start != None:
+        newPathDict['startDate'] = start
+    if end != None:
+        newPathDict['endDate'] = end
+    newPathDict['st'] = path.orgId
+    newPathDict['pathid'] = str(path.id)
+    newPathDict['loadSeqTz']= 'false'
+    url = form_url(url_base, newPathDict)
+    return url
+
+def simple_url_path(pvc, path):
+    """
+    create a simple url that will open a page for a specific path
+    @param path: path object (Dict)
+    @param start: start time in unix seconds
+    @param end: end time in unix seconds
+    @return: url string
+    """
+    url_base = pvc +  '/pvc/pathdetail.html'
+    newPathDict = {}
+    newPathDict['pathid'] = path['pathId']
+    newPathDict['loadSeqTz']= 'false'
+    url = form_url(url_base, newPathDict)
+    return url
+
 
 def unix_time(dt):
     epoch = datetime.datetime.utcfromtimestamp(0)
     delta = dt - epoch
     return int(delta.total_seconds()* 1000)
 
-def create_url_path(pvc, path, start, end):
-    """
-    create a deep link url that will open a page for the specific start/end time window
-    @param path: path object (Dict)
-    @param start: start time in unix seconds
-    @param end: end time in unix seconds
-    @return: url string
-    """
-    #'https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2153&pathid=4464&startDate=1388579369210&endDate=1388582973999&loadSeqTz=false'
-    # This is the IT account
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2153&pathid=7045&startDate=1389125191941&endDate=1389128801613&loadSeqTz=false
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2153&pathid=7044&startDate=1389125194750&endDate=1389128830272&loadSeqTz=false
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2153&pathid=7046&startDate=1389125194665&endDate=1389128843009&loadSeqTz=false
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2153&pathid=8127&startDate=1389125254094&endDate=1389128857245&loadSeqTz=false
-    ## This is the Experian account
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=551&pathid=8471&startDate=1389125328719&endDate=1389128935911&loadSeqTz=false
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=551&pathid=8278&startDate=1389125330036&endDate=1389128952220&loadSeqTz=false
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=551&pathid=8461&startDate=1389125331309&endDate=1389128964802&loadSeqTz=false
-    #https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=551&pathid=8353&startDate=1389125332568&endDate=1389128980819&loadSeqTz=false
-    # TODO convert this to use form_url2, delete form_url
-    url_base = pvc +  '/pvc/pathdetail.html'
-    st = 'st=2153'  #don't know what this is
-    pathid = 'pathid=' + str(path['pathId'])
-    startDate = 'startDate='+str(start)
-    endDate = 'endDate=' + str(end)
-    loadSeq = 'loadSeqTz=false'
-    arg_list = [st, pathid, startDate, endDate, loadSeq]
-    url = form_url(url_base, arg_list)
-    return url
-
 def find_diags(pvc, user, password, path_id, start, end):
-    diags = requests.get(pvc + "/pvc-ws/v1/diagnostics", auth=(user, password), params = {'pathId':path_id,'from':start,'to':end})
+    diags = requests.get(pvc + "/pvc-data/v2/diagnostic", auth=(user, password), params={'pathId':path_id,'from':start,'to':end})
+    # https://polycom.pathviewcloud.com/pvc/emberview/testdetail/test/3576658/summary
     return diags.json()
-
-def create_url_diag(pvc, orgId, diag_id, tab=0):
-    base = pvc + '/pvc/testdetail.html'
-    args = {}
-    args['st'] = str(orgId)
-    args['testid'] = str(diag_id)
-    args['activeTabTest'] = str(tab)
-    url = form_url2(base, args)
-    return url
-
-# build this:
-# https://polycom.pathviewcloud.com/pvc/testdetail.html?st=551&testid=1190951&activeTabTest=0
-# https://polycom.pathviewcloud.com/pvc/testdetail.html?st=551&testid=1190951&activeTabTest=1
 
 def open_web(url):
     new = 2 # open in a new tab, if possible
@@ -155,46 +271,63 @@ def get_start_end():
     link_dict = parse_deep_link(deep_link)
     return (link_dict['startDate'],link_dict['endDate'])
 
+def find_path_partial_name(partial, pvc, user, password, org=None):
+    paths = get_paths(pvc, user, password, org_name=org)
+    for path in paths:
+        if partial in path.pathName:
+            open_web(create_url_path(pvc,path))
 
+def open_diag_this_path_view(pvc, user, password):
+    def open_diags(deep_link):
+        linkDict = parse_deep_link(deep_link)
+        diags = find_diags(pvc, user, password, linkDict['pathid'], int(linkDict['startDate'])/1000, int(linkDict['endDate'])/1000)
+        # find all diags in this range
+        for diag in diags:
+            url = create_url_diag(pvc, linkDict['st'], diag['testId'],tab=1)
+            open_web(url)
+    w.input_window('Deep Link:', open_diags)
+    # deep_link = raw_input('Deep link reference: ')
 
-#target = '10.250.7.10'
-#target = '172.27.209.80'
-#pathlist = paths_by_target_ip(pvc, user, password, target)
+def paths_to_file(paths, filename):
+    out_file = open(filename, 'wb')
 
-#print 'Total Length', len(pathlist)
+    for path in paths:
+        if 'qosName' in path.dict:
+            qos = path.dict['qosName']
+        else:
+            qos = 'None'
+        out_file.write(path.pathName + '\t' + path.ip + '\t' + path.dict['instrumentation'] + '\t' + path.dict['networkType'] + '\t' + path.dict['sourceAppliance'] + '\t' + qos + '\n')
+    out_file.close()
 
-#start_string = raw_input('Start time mm/dd/yyyy hh:mm (24hr): ')
-#end_string = raw_input('End time mm/dd/yyyy hh:mm (24hr): ')
-#format = '%m/%d/%Y %H:%M'
-#start_dt = datetime.datetime.strptime(start_string, format)
-#end_dt = datetime.datetime.strptime(end_string, format)
+def create_path(path_dict, pvc, user, password):
+    """
+    Use path object information to initiate path on pathview cloud
+    @param path: path object defining the path
+    @return:True for success, False for failure
+    """
+    c_path_resp = requests.post(pvc + "/pvc-data/v2/path", json=path_dict, auth=(user, password))
+    return c_path_resp
 
-#start, end = get_start_end()
-#for path in pathlist:
-#    open_web(create_url_path(pvc, path, start, end))
+def find_org(org_name, org_set):
+    """
+    Given name of org, search org set for org with name and return org
+    @param org_name: text string org name
+    @param org_set:
+    @return:
+    """
+    for org in org_set:
+        if org.name == org_name:
+            return org
+    return False
 
-#aa = create_url_path(pvc,pathlist[2],unix_time(start_dt), unix_time(end_dt))
-#open_web(aa)
-#print aa
-
-#start, end = get_start_end()
-def print_paths_for_org(org):
-    aa = get_paths_org(pvc, user, password,'C-CALA-BTG')
-    for path in aa:
-        for key in path:
-            print key, path[key]
-    print 'Total paths = ', len(aa)
-
-# https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=551&pathid=8471&startDate=1389201166226&endDate=1389215601545&loadSeqTz=false
-
-#find all diagnostics for this path within this timeslot and open web pages for each on the details page
-def open_diag_this_path_view():
-    deep_link = raw_input('Deep link reference: ')
-    linkDict = parse_deep_link(deep_link)
-    diags = find_diags(pvc, user, password, linkDict['pathid'], int(linkDict['startDate'])/1000, int(linkDict['endDate'])/1000)
-    # find all diags in this range
-    for diag in diags:
-        url = create_url_diag(pvc, linkDict['st'], diag['testId'],tab=1)
-        #print url
-        open_web(url)
-
+def find_alert(profile_name, alert_set):
+    """
+    Search through alert_set, find alert that has name profile_name and return it
+    @param profile_name: name of alert we want to find
+    @param alert_set: list of Alerts
+    @return: found Alert or False
+    """
+    for alert in alert_set:
+        if alert.name == profile_name:
+            return alert
+    return False

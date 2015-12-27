@@ -15,7 +15,7 @@ def return_deep_link(event=None):
     master.destroy()
 
 
-def input_window(window_name, action):
+def input_window(window_name, action, org):
     global master
     master = Tk()
     Label(master, text=window_name).grid(sticky=W)
@@ -26,7 +26,7 @@ def input_window(window_name, action):
 
     def enter_deep_link(event):
         deep_link=e.get()
-        action(deep_link)
+        action(org, deep_link)
         master.destroy()
 
     # Frame(master,height=2,width=170,bg="black").grid(columnspan=2)

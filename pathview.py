@@ -1,46 +1,14 @@
-
+#TODO Fixed urllib3 and credentials for get_paths, extend to other requests
 #TODO Add ability to find top ten paths with 1-day or 7-day violations
 #TODO Add ability to find paths with QoS violations
-#TODO Provide error message and keep running when org name is not found in file
-#TODO When running option #1, and no org is selected, error?
 #TODO Test pulling orgs as other than super user
+#TODO Track input from web server up through urllib
 
 import pathview_api_functions as pv, ip_address_functions as ip, time, os, csv
-# import windows as w
-import urllib3
-import certifi
 import glob
 
-http = urllib3.PoolManager(
-    cert_reqs = 'CERT_REQUIRED', #Force certificate check
-    ca_certs=certifi.where(),  # Path to the Certifi bundle
-)
-
-txt_files = glob.glob("./*.txt")
-if ".\\user.txt" in txt_files:
-    user_file = open ("./user.txt", 'rb')
-    for row in user_file:
-        id, value = row.split(": ")
-        value = value.rstrip()
-        if id == 'username':
-            user = value
-        elif id == 'password':
-            password = value
-        elif id == 'pvc':
-            pvc = value
-else:
-    pvc = raw_input("PathView Cloud Address? (inc. https://... ")
-    user = raw_input("PathView user name? ").rstrip()
-    password = raw_input("PathView password? ").rstrip()
-
-
-org_file = 'org_codes_plcm.txt'
-global org_set
-global alert_set
-org_set = pv.Org_list(pvc, user, password).org_list
-
 def choose_org():
-    find_org = raw_input('Organization? ').lower().rstrip()
+    find_org = raw_input('Fragment of organization name? ').lower().rstrip()
     # search org list here for org name.  None is an OK answer
     possible = []
     for org in org_set:
@@ -51,14 +19,19 @@ def choose_org():
     if len(possible_sorted) == 1:
         return possible_sorted[0]
     elif len(possible_sorted) == 0:
-        print 'Org not found in org list, try checking org IDs'
+        print '*** Org not found in org list ***'
         return None
     else:
-        for org in possible_sorted:
-            count += 1
-            print count, org.name
-        index = int(raw_input('Which org to use? '))
-        return possible_sorted[index-1]
+        while(True):
+            for org in possible_sorted:
+                count += 1
+                print count, org.name
+            index = int(raw_input('Which org to use? '))
+            if index <= len(possible_sorted) and index > 0:
+                return possible_sorted[index-1]
+            else:
+                print '*** Number not found in possible org list ***'
+                return None
 
 def choose_path(org):
     #Example URL to create:
@@ -73,18 +46,18 @@ def choose_path(org):
     start_sec = end_sec - (24 * 60 * 60) # one day
     end = end_sec * 1000 # milliseconds
     start = start_sec * 1000 # milliseconds
-    filter = {'name':'*' + partial_name.lower() + '*'}
-    paths = pv.get_paths(pvc, user, password, org, filters=filter)
-    # paths2 = []
-    # for path in paths:
-    #     if partial_name.lower() in path.pathName.lower():
-    #         paths2.append(path)
-    paths3 = sorted(paths, key=lambda k: k.pathName)
-    if len(paths3) == 0:
+    # filter = {'name':'*' + partial_name.lower() + '*'}
+    path_list = org.get_path_set()
+    paths_unsorted = []
+    for path in path_list:
+        if partial_name.lower() in path.pathName.lower():
+            paths_unsorted.append(path)
+    paths = sorted(paths_unsorted, key=lambda k: k.pathName)
+    if len(paths) == 0:
         print 'No matching path found'
-    elif len(paths3) > 1:
+    elif len(paths) > 1:
         pathNum = 0
-        for path in paths3:
+        for path in paths:
             pathNum += 1
             print str(pathNum) + '\t' + path.pathName
         pathChoice = True
@@ -98,27 +71,22 @@ def choose_path(org):
                 break
 
             if pathCh <= pathNum and pathCh > 0:
-                url = pv.create_url_path(pvc, paths3[pathCh-1], start, end)
+                url = pv.create_url_path(pvc, paths[pathCh-1], start, end)
                 pv.open_web(url)
                 # pv.open_web(pv.create_url_path(pvc, paths3[pathCh-1], start, end))
     else:
-        pv.open_web(pv.create_url_path(pvc, paths3[0], start, end))
+        pv.open_web(pv.create_url_path(pvc, paths[0], start, end))
 
-def choose_path_by_ip(org, pvc, user, password):
+def choose_path_by_ip(org):
     #Query user for IP address
     ip_needed = raw_input('Target IP address? ').rstrip()
-    # is this a straight IP address or a subnet query?
-    # if '/' in ip_needed:
-    #     is_subnet = True
-    # else:
-    #     is_subnet = False
     is_subnet = '/' in ip_needed
     if is_subnet:
         subnet = ip.Ip4Subnet(ip_needed, 'Subnet')
         #Find all paths in the org
-        paths = pv.get_paths(pvc, user, password, org_set, org_name=org)
+        paths = pv.get_paths(creds, org)
     else:
-        paths = pv.get_paths(pvc, user, password, org_set, target=ip_needed)
+        paths = pv.get_paths(creds, org, target=ip_needed)
     paths2 = []
     #Search thru looking for this IP address or subnet range
     for path in paths:
@@ -155,7 +123,7 @@ def choose_path_by_ip(org, pvc, user, password):
     else:
         pv.open_web(pv.create_url_path(pvc, paths3[0]))
 
-def path_param_exceeds(org, measure, threshold):
+def path_param_exceeds(org, creds, measure, threshold):
     '''
     Find paths where the specified parameter (initially loss) exceeds the given threshold during the last hour
     @param org:
@@ -163,10 +131,11 @@ def path_param_exceeds(org, measure, threshold):
     @param threshold:
     @return:
     '''
-    all_paths = pv.get_paths(pvc, user, password, org_set, org_name=org)
+    #TODO should be able to use existing path_list?
+    all_paths = pv.get_paths(creds, org)
     paths = []
     for path in all_paths:
-        measures = pv.get_path_param(pvc, user, password, path, measure)
+        measures = pv.get_path_param(creds, path, measure)
         for minute in measures:
             found = False
             for time_key in minute:
@@ -188,12 +157,12 @@ def menu(options, org):
     for key in sorted(options):
         print key + ':', options[key][0]
 
-def is_csv(filList):
-    newList = []
-    for handle in filList:
-        if (handle.lower()[-4:] == '.csv'):
-            newList.append(handle)
-    return newList
+# def is_csv(filList):
+#     newList = []
+#     for handle in filList:
+#         if (handle.lower()[-4:] == '.csv'):
+#             newList.append(handle)
+#     return newList
 
 def choose_csv():
     """
@@ -201,8 +170,7 @@ def choose_csv():
     @return: filename as text string
     """
     # choice = raw_input('\nName of input file? ').strip()
-    all_files = [os.path.join(path, file) for (path, dirs, files) in os.walk('.') for file in files]
-    csv_list = is_csv(all_files)
+    csv_list = glob.glob("./*.csv")
     while True:
         if len(csv_list) > 0:
             file_num = 0
@@ -211,7 +179,7 @@ def choose_csv():
                 print str(file_num) + '\t' + csv_file_name
             file_choice = True
             while file_choice:
-                file_choice = raw_input('Open which path? ').rstrip()
+                file_choice = raw_input('Open which file? ').rstrip()
                 if file_choice == 'q' or file_choice == 'Q' or file_choice == '' or file_choice == '0':
                     break
                 try:
@@ -222,10 +190,10 @@ def choose_csv():
                 if file_choice <= file_num and file_choice > 0:
                     return csv_list[file_num-1]
 
-def create_paths(org, pvc, user, password):
+def create_paths(org):
     """
     Choose local csv file that defines new paths, create paths
-    @return:
+    @return: nada
     """
     in_fields = [
         'sourceAppliance',
@@ -263,6 +231,9 @@ def create_paths(org, pvc, user, password):
                     item_num += 1
                 ''' find current org '''
                 # org = pv.find_org(path_dict['orgId'], org_set)
+                #TODO add org to CSV as a check?
+                #TODO check to see if org in file matches current org, if not, offer to change
+                #TODO if org not available to this user, print appropriate error message and quit
                 ''' fix up cells '''
                 if org:
                     ''' add orgId'''
@@ -275,16 +246,19 @@ def create_paths(org, pvc, user, password):
                 else:
                     path_dict['asymmetric'] = 'false'
                 ''' find identified alert profile '''
-                profile = pv.find_alert(path_dict['alertProfileId'], alert_set)
+                alert_set = org.get_alert_set()
+                profile = alert_set.find_alert(path_dict['alertProfileId'])
                 ''' change alertProfileId from name to id value'''
                 path_dict['alertProfileId'] = profile.id
-                response = pv.create_path(path_dict, pvc, user, password)
-                if response.reason == 'Created':
-                    print path_dict['pathName'] + ': ' + response.reason
-                else:
-                    print path_dict['pathName'] + ': ' + response.reason + ': ' + response.text
+                org.create_path(path_dict)
     except:
         raise
+
+"""
+----------------------------------------------------------------------
+                   MAIN
+----------------------------------------------------------------------
+"""
 
 options = {
     '0': ['Exit'],
@@ -297,10 +271,39 @@ options = {
     # '7': ['Check org ids']
 }
 
+txt_files = glob.glob("./*.txt")
+if ".\\user.txt" in txt_files:
+    user_file = open ("./user.txt", 'rb')
+    for row in user_file:
+        id, value = row.split(": ")
+        value = value.rstrip()
+        if id == 'username':
+            user = value
+        elif id == 'password':
+            password = value
+        elif id == 'pvc':
+            pvc = value
+else:
+    pvc = raw_input("PathView Cloud Address? (inc. https://... ")
+    user = raw_input("PathView user name? ").rstrip()
+    password = raw_input("PathView password? ").rstrip()
+
 def printem(the_string):
     print the_string
 
+
+
+creds = pv.Credentials(pvc, user, password)
+
+global org_set
+org_set = pv.Org_list(creds).org_list
+
+print
 org = None
+while org == None:
+    org = choose_org()
+org.open_org()
+org.init_path_set()
 while True:
     menu(options, org)
     choice = raw_input('\nChoice? ').strip()
@@ -309,16 +312,13 @@ while True:
     if choice == '1':
         org = choose_org()
         # if org:
-            # pv.open_org(org, pvc)
-        alert_set = pv.Alert_list(org, pvc, user, password).alert_list
+        #     alert_set = org.get_alert_set()
     if choice == '2':
-        if org == None:
-            org = choose_org()
         choose_path(org)
     if choice == '3':
-        pv.open_diag_this_path_view(pvc, user, password)
+        pv.open_diag_this_path_view(org)
     if choice == '4':
-        choose_path_by_ip(org, pvc, user, password)
+        org.choose_path_by_ip()
     if choice == '5':
         paths3 = path_param_exceeds(org, 'dataLoss', 1)
         pathNum = 0
@@ -327,7 +327,7 @@ while True:
             print str(pathNum) + '\t' + path.pathName + '\t' + path.ip
         pathChoice = True
         while pathChoice:
-            pathChoice = raw_input('Open which path csv file? ').rstrip()
+            pathChoice = raw_input('Open which path? ').rstrip()
             try:
                 pathCh = int(pathChoice)
                 if pathCh <= pathNum:
@@ -339,9 +339,4 @@ while True:
             else:
                 pv.open_web(pv.create_url_path(pvc, paths3[0]))
     if choice == '6':
-        if org == None:
-            org = choose_org()
-            alert_set = pv.Alert_list(org, pvc, user, password).alert_list
-        create_paths(org, pvc, user, password)
-    # if choice == '7':
-    #     pv.check_orgs(pvc, user, password, org_set, org_file)
+        create_paths(org)

@@ -1,20 +1,22 @@
 import requests, datetime, webbrowser, sys, json
 import windows as w
 import ip_address_functions as ip
-import urllib3, certifi, time
+import urllib, urllib3, certifi, time
 
 http = urllib3.PoolManager(
     cert_reqs = 'CERT_REQUIRED', #Force certificate check
     ca_certs=certifi.where(),  # Path to the Certifi bundle
 )
 
+# These are parameters of the pathview cloud.  The cloud will only respond to 50 requests in any 10 second window
+# These are used by the bucket class to manage cloud requests
+req_window = 10
+req_per_window = 50
 
 '''
 API Documentation here:
 https://polycom.pathviewcloud.com/pvc-data/swagger/#
 '''
-
-#TODO - make alert list be a component of the org
 
 class Credentials():
     def __init__(self, pvc, user, password):
@@ -36,6 +38,7 @@ class Org():
         self.path_set = None
         self.creds = creds
         self.alert_set = None
+        self.bucket = Bucket(req_per_window,req_window)
 
     def __repr__(self):
         return self.name
@@ -53,7 +56,7 @@ class Org():
         while(1):
             payload['page'] = page
             payload['limit'] = page_len
-            path_set = pathview_http('GET', 'pvc-data/v2/path', self.creds, fields=payload)
+            path_set = pathview_http('GET', 'pvc-data/v2/path', self.creds, bucket=self.bucket, fields=payload)
             path_page = json.loads(path_set.data)
             paths += path_page
             if len(path_page) < page_len:
@@ -72,6 +75,7 @@ class Org():
         headers = urllib3.util.make_headers(basic_auth=self.creds.user + ':' + self.creds.password)
         url = self.creds.pvc + '/pvc-data/v2/path'
         headers['Content-Type'] = 'application/json'
+        self.bucket.get_token()
         c_path_http =  http.request('POST', url, headers=headers, body=json.dumps(path_dict))
         if c_path_http.status > 399:
             http_data = json.loads(c_path_http.data)
@@ -123,21 +127,21 @@ class Org():
         url = form_url(base, args)
         open_web(url)
 
-    def open_diag_this_path_view(self, deep_link):
+    def open_diag_this_path_view(self):
         """
         https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2590&pathid=11866&startDate=1451050162122&endDate=1451053787270&loadSeqTz=false
         Using a deep link as input, find the diagnostic events in the viewed time window of this path
         @param creds:
         @return:
         """
-        def open_diags(deep_link):
+        def open_diags(org, deep_link):
             linkDict = parse_deep_link(deep_link)
             path = self.path_by_id(linkDict['pathid'])
             diags = path.find_diags(int(linkDict['startDate'])/1000, int(linkDict['endDate'])/1000)
             for diag in diags:
-                url = create_url_diag(self.creds.pvc, self.id, diag['testId'],tab='data')
+                url = create_url_diag(org.creds.pvc, org.id, diag.id, tab='data')
                 open_web(url)
-        w.input_window('Deep Link:', open_diags)
+        w.input_window('Deep Link:', open_diags, self)
 
     def filtered_paths(self, filter):
         """
@@ -164,6 +168,7 @@ class Org():
             subnet = ip.Ip4Subnet(ip_needed, 'Subnet')
         #Search thru looking for this IP address or subnet range
         #TODO This looks for paths with this range as target, need to expand to show source paths as well
+        #TODO Can do this if it is a dual-ended path ..
         for path in paths:
             dst_ip = path.target_ip
             if is_subnet:
@@ -198,6 +203,103 @@ class Org():
                     if pathNum == 'q' or pathNum == 'Q' or pathNum == '' or pathNum == '0':
                         break
 
+    def path_param_exceeds(self, measure, threshold, start=int(time.time())-60*60, end=int(time.time())):
+        '''
+        Find paths where the specified parameter (initially loss) exceeds the given threshold
+        between start and end times (Unix seconds).  default to the last hour
+        @param measure: what measure to look at (e.g. data packet loss)
+        @param threshold: what threshold to test against (e.g. 1% loss)
+        @param start: start time in unix seconds
+        @param end: end time in unix seconds
+        @return:
+        '''
+        paths = []
+        for path in self.path_set:
+            if path.dict['disabled']:
+                print 'Path ' + path.pathName + ' is disabled'
+                continue
+            print 'Pulling stats on ' + path.pathName
+            perf_params = path.get_path_param()
+            if perf_params:
+                for minute in perf_params['data'][measure]:
+                    found = False
+                    if minute['value'] >= threshold:
+                        paths.append(path)
+                        found = True
+                        break
+                    if found:
+                        break
+        return paths
+
+    def path_param_exceeds2(self, measure, threshold, start=int(time.time())-60*60, end=int(time.time())):
+        '''
+        Find paths where the specified parameter (initially loss) exceeds the given threshold
+        between start and end times (Unix seconds).  default to the last hour
+        This version pulls all the path parameters in one http pull
+        @param measure: what measure to look at (e.g. data packet loss)
+        @param threshold: what threshold to test against (e.g. 1% loss)
+        @param start: start time in unix seconds
+        @param end: end time in unix seconds
+        @return:
+        '''
+        return_paths = []
+        paths = self.get_path_set()
+        # build list of path IDs
+        id_list = []
+        for path in paths:
+            if not path.dict['disabled']:
+                id_list.append(('pathIds',path.id))
+        path_requests = urllib.urlencode(id_list)
+        url = 'pvc-data/v2/path/data' + '?' + path_requests
+        req = pathview_http('GET', url, self.creds, bucket=self.bucket)
+        data = json.loads(req.data)
+        # Build a dictionary with results in form: key=pathId, value = dict
+        param_dict = {}
+        for params in data:
+            param_dict[params['pathId']] = params
+        # Go through path list:
+        paths_with_params = []
+        for path in paths:
+            # Add values into path object if they are available
+            if path.id in param_dict:
+                path.set_path_parameters(param_dict[path.id])
+            # Add that path to new list of paths to be evaluated below
+                paths_with_params.append(path)
+        paths = []
+        for path in paths_with_params:
+            perf_params = path.get_path_param()
+            for minute in perf_params['data'][measure]:
+                found = False
+                if minute['value'] >= threshold:
+                    paths.append(path)
+                    found = True
+                    break
+                if found:
+                    break
+        return paths
+
+    def find_paths_qos(self, by_hop=False):
+        """
+        build routine in org to search through paths and find paths with QoS change
+        Distinguish between those that change end-to-end and those that change mid-path but correct by the end
+        Pass back list of paths that meet criteria requested
+        @param by_hop: find paths where QoS changes mid-path
+        @param flush: flush out current diag data & refetch
+        @return: list of path objects with QoS change
+        """
+        qos_path_list = []
+        path_no_diag = []
+        for path in self.path_set:
+            if path.disabled == False:
+                path.qos_change(by_hop)
+                if path.qos_consistent == False:
+                    qos_path_list.append(path)
+                elif (by_hop and path.qos_mid_change):
+                    qos_path_list.append(path)
+                elif path.qos_found_diag == False and path.disabled == False:
+                    path_no_diag.append(path)
+        return(qos_path_list, path_no_diag)
+
 
 class Org_list():
     def __init__(self, creds):
@@ -224,19 +326,42 @@ class Path():
         self.org = org
         self.parameters = None
         self.diag_list = []
+        self.qos_consistent = None
+        self.qos_mid_change = None
+        self.qos_changes = []
+        self.qos_diag_time = None
+        self.qos_found_diag = None
+        self.disabled = path_dict['disabled']
 
     def __repr__(self):
         return self.pathName
 
-    def get_path_param(self, path_id):
+    def set_path_parameters(self, parameters):
+        """
+        If path parameters have been obtained in bulk, use this function to stuff them into the objects
+        @param parameters: dictionary of parameters. Overwrites any existing parameters
+        @return:
+        """
+        self.parameters = parameters
+
+    def get_path_param(self):
         """
         Pull the details of a path (loss, jitter, RTT, etc).  Put details into the Path object and return
-         details as a dict.  Why wouldn't this be inside the class?
+         details as a dict.
         """
         if self.parameters == None:
-            arguments = {'id':self.id}
-            path_http = pathview_http('GET', 'pvc-data/v2/diagnostic/' + str(self.id), self.org.creds)
-            self.parameters = json.loads(path_http.data)
+            try_count = 4
+            success = False
+            while not success:
+                try:
+                    path_http = pathview_http('GET', 'pvc-data/v2/path/' + str(self.id) + '/data', self.org.creds, bucket=self.bucket,)
+                    self.parameters = json.loads(path_http.data)
+                    success = True
+                except:
+                    try_count -= 1
+                    if try_count == 0:
+                        print'*** Unable to pull data for path ' + self.pathName + ' ***'
+                        return False
         return self.parameters
 
     def open_web(self, start=None, end=None):
@@ -257,7 +382,7 @@ class Path():
         url = create_url_path(pvc, self, start_ms, end_ms)
         open_web(url)
 
-    def find_diags(self, start, end):
+    def find_diags(self, start, end, limit=None):
         """
         Find diagnostics that were executed on this specific path between the start and end times
         @param start: start of time window
@@ -266,7 +391,11 @@ class Path():
         https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2590&pathid=11866&startDate=1451050162122&endDate=1451053787270&loadSeqTz=false
         """
         payload = {'pathId':self.id,'from':start,'to':end}
-        diag_http = pathview_http('GET', 'pvc-data/v2/diagnostic', self.org.creds, fields=payload)
+        if limit != None:
+            payload['limit'] = limit
+        diag_http = pathview_http('GET', 'pvc-data/v2/diagnostic', self.org.creds, bucket=self.org.bucket, fields=payload)
+        if diag_http.data == '' or diag_http.data == '[]':
+            return False
         diag_dicts = json.loads(diag_http.data)
         diag_list = self.create_diags_from_dict_list(diag_dicts)
         return diag_list
@@ -324,6 +453,68 @@ class Path():
                 return diag
         return False
 
+    def qos_change(self, check_hops):
+        """
+        build routine in Path class that will find a recent diagnostic, determine QoS changes, and store as local values
+        Need:  qos_consistent (True or False)
+                qos_changes[(hop, value) where hop is 0 to N and value is 'AF41' etc.
+        This routine takes a 'flush=True' input to force it to go get new data
+        If this routine has no data it goes to get new data
+        If the data is more than an hour old, it goes to get new data
+        @param check_hops: if True, find paths where qos changes within the path
+        @param flush: if True, clear out current data (if any) and fetch new from cloud
+        @return: True or False to include this path in the list
+        """
+        '''
+        Pull most recent diag from web
+        '''
+        fetch_count = 6
+        days_history = 120
+        now = unix_time(datetime.datetime.utcnow())
+        # Go get most recent diag
+        start = now - days_history*24*3600
+        # Pull most recent diagnostic
+        diag_list = self.find_diags(start, now, limit=fetch_count)
+        if diag_list == False:
+            print '*** For path ' + self.pathName + ' no diagnostic available within 60 days ***'
+            self.qos_found_diag = False
+            return False
+        diag = diag_list[0]
+        print 'For path ' + self.pathName + ' found diag that started at ' + time_to_str(diag.startTime) + ' UTC'
+        '''
+        Now pull diag statistics and determine qos change information
+        '''
+        details = False
+        using_diag = 0
+        while details == False:
+            details = diag.get_detail()
+            if details == False:
+                using_diag += 1
+                if using_diag == fetch_count or using_diag == len(diag_list):
+                    print '*** Unable to find good diag within latest ' + str(fetch_count) + ' diags on path ' + self.pathName + ' ***'
+                    self.qos_found_diag = False
+                    return False
+                print '*** Unable to pull stats on diag for ' + self.pathName + ' evaluating previous diag ***'
+                diag = diag_list[using_diag]
+        self.qos_found_diag = True
+        hop_count = len(details)
+        if details[hop_count-1]['qosValueMeasured'] == details[hop_count-1]['qosValueSet']:
+            self.qos_consistent = True
+        else:
+            self.qos_consistent = False
+        self.qos_changes = [details[0]['qosValueSet']]
+        self.qos_mid_change = False
+        for hop in range(hop_count):
+            self.qos_changes.append((hop + 1, details[hop]['qosValueMeasured']))
+            if details[0]['qosValueMeasured'] != details[hop]['qosValueMeasured']:
+                self.qos_mid_change = True
+        # if check_hops and not self.qos_mid_change:
+        #     return True
+        # elif not check_hops and not self.qos_consistent:
+        #     return True
+        # else:
+        #     return False
+
 
 class Path_list():
     """
@@ -342,10 +533,6 @@ class Diag():
     Create a Diagnostics object from Diag ID.  If there is a reverse direction diag associated with it, create that
       Diag object as well (recurse) and cross point using the self.bidi_id field
     """
-    #TODO Can't find a way not to pull diag info twice.  Still not de-duping correctly.  Need to do it here I think.
-    #TODO need to check path list before creating new Diag to see if it already exists, return existing one.
-    #TODO can I return an old Diag from a Diag init?  Look at __new__ function.
-
     def __init__(self, path, diag_dicts):
         self.detail = None
         self.path = path
@@ -368,20 +555,29 @@ class Diag():
             if self.bidi == None:
                 self.bidi = Diag(self.path, [diag_reverse])
         self.name = self.dict['name']
+        # fmt = '%Y-%m-%dT%H:%M:%S.%f'
         self.startTime = self.dict['startTime']
         self.detail = None
+        self.test_status = diag_dicts[0]['testStatus']
 
     def __repr__(self):
         return str(self.id)
 
     def get_detail(self):
+        if self.test_status == 'Failed':
+            return False
         if self.detail == None:
             # https://polycom.pathviewcloud.com/pvc-data/v2/diagnostic/4021646/detail
             arguments = {'id':self.id}
-            detail_http = pathview_http('GET', 'pvc-data/v2/diagnostic/' + str(self.id) + '/detail', self.creds, fields=arguments)
+            detail_http = pathview_http('GET', 'pvc-data/v2/diagnostic/' + str(self.id) + '/detail', self.creds, bucket=self.org.bucket,  fields=arguments)
+            if detail_http.data == '':
+                return False
             detail_dicts = json.loads(detail_http.data)
             self.detail = detail_dicts[0]['hops']
-            self.bidi.add_bidi_details(detail_dicts[1]['hops'])
+            if self.detail == []:
+                return False
+            # if self.bidi:
+            #     self.bidi.get_detail()
         return self.detail
 
     def add_bidi_details(self, details):
@@ -418,7 +614,7 @@ class Alert():
 class Alert_list():
     def __init__(self, org):
         arguments = {'orgId':org.id}
-        alert_http = pathview_http('GET', 'pvc-data/v2/alertProfile', org.creds, fields=arguments)
+        alert_http = pathview_http('GET', 'pvc-data/v2/alertProfile', org.creds, bucket=org.bucket, fields=arguments)
         alert_dicts = json.loads(alert_http.data)
         self.alert_set = []
         for alert_dict in alert_dicts:
@@ -436,7 +632,7 @@ class Alert_list():
         return False
 
 
-def pathview_http(action, url, creds, fields={}, body=''):
+def pathview_http(action, url, creds, bucket=None, fields={}, body=''):
     """
     Consolidation of requests to PVC so all error handling can be done here.
     @param action: 'GET' or 'POST'
@@ -447,8 +643,15 @@ def pathview_http(action, url, creds, fields={}, body=''):
     """
     headers = urllib3.util.make_headers(basic_auth=creds.user + ':' + creds.password)
     url = creds.pvc + "/" + url
+    if bucket != None:
+        bucket.get_token()
     try:
-        return http.request(action, url, fields=fields, headers=headers, body=body)
+        http_resp =  http.request(action, url, fields=fields, headers=headers, body=body)
+        if http_resp.reason == 'Too Many Requests':
+            raise ValueError ('Overrunning service, bucket not working correctly')
+        if http_resp.status >= 400:
+            raise ValueError('HTTP Response: ' + str(http_resp.status) + ' - ' + http_resp.msg)
+        return http_resp
     except requests.exceptions.Timeout:
         # Maybe set up for a retry, or continue in a retry loop
         print 'Network timeout, what is going on?'
@@ -557,48 +760,36 @@ def unix_time(dt):
     """
     epoch = datetime.datetime.utcfromtimestamp(0)
     delta = dt - epoch
-    return int(delta.total_seconds()* 1000)
+    return int(delta.total_seconds())
 
+def time_to_str(date_time_value):
+    if type(date_time_value) is str:
+        date_time_value = int(str)
+    if type(date_time_value) is long:
+        if date_time_value > 10^12:
+            date_time_value = date_time_value / 1000
+        time_dt = datetime.datetime.fromtimestamp(date_time_value)
+        # print(datetime.datetime.fromtimestamp(int("1284101485")).strftime('%Y-%m-%d %H:%M:%S'))
+    elif (type(date_time_value) is datetime.datetime):
+        time_dt = time
+    else:
+        raise ValueError('Did not recognize time value as Unix or datetime')
+    fmt = '%Y-%m-%d %H:%M:%S'
+    return time_dt.strftime(fmt)
 
-'''
-def find_diags(creds, path_id, start, end):
-    """
-    Find diagnostics that were executed on this specific path between the start and end times
-    @param creds:
-    @param path_id:
-    @param start:
-    @param end:
-    @return:
-    """
-    payload = {'pathId':path_id,'from':start,'to':end}
-    diag_http = pathview_http('GET', 'pvc-data/v2/diagnostic', creds, fields=payload)
-    diag_data = json.loads(diag_http.data)
-    #TODO need to use (not yet created) diag list to de-dup this list, convert to diag class
-    #TODO this should be inside the Path class
-    return diag_data
-'''
 
 def open_web(url):
     new = 2 # open in a new tab, if possible
     webbrowser.open(url,new=new)
 
+
 def parse_deep_link(deep_link):
-    '''
-    urllib3.util.parse_url(url)
-        Given a url, return a parsed Url namedtuple. Best-effort is performed to parse incomplete urls. Fields not provided will be None.
-
-        Partly backwards-compatible with urlparse.
-
-        Example:
-
-        >>> parse_url('http://google.com/mail/')
-        Url(scheme='http', host='google.com', port=None, path='/', ...)
-        >>> prase_url('google.com:80')
-        Url(scheme=None, host='google.com', port=80, path=None, ...)
-        >>> prase_url('/foo?bar')
-        Url(scheme=None, host=None, port=None, path='/foo', query='bar', ...)
-    '''
-    #TODO consider using urllib3.util.parse_url for this function?
+    """
+    Input a deep link copied from GUI and parse through to find the lookup components like
+    org id, path id, etc.  Return as a dictionary.
+    @param deep_link: Deep link from paste window
+    @return: dict of value names and values
+    """
     url, args = deep_link.split('?')
     arg_list = args.split('&')
     arg_dict = {}
@@ -606,6 +797,7 @@ def parse_deep_link(deep_link):
         name, value = arg.split('=')
         arg_dict[name] = value
     return  arg_dict
+
 
 def get_start_end():
     deep_link = raw_input('Deep link: ')
@@ -618,25 +810,32 @@ def get_start_end():
 #         if partial in path.pathName:
 #             open_web(create_url_path(org.creds.pvc,path))
 
-def open_diag_this_path_view(org):
-    """
-    https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2590&pathid=11866&startDate=1451050162122&endDate=1451053787270&loadSeqTz=false
-    Using a deep link as input, find the diagnostic events in the viewed time window of this path
-    @param creds:
-    @return:
-    """
-    def open_diags(org, deep_link):
-        link_dict = parse_deep_link(deep_link)
-        path = org.path_by_id(link_dict['pathid'])
-        if path == False:
-            raise ValueError ('Could not find path by ID in this org')
-        diags = path.find_diags(int(link_dict['startDate'])/1000, int(link_dict['endDate'])/1000)
-        # diags = diag_de_dupe(diags)
-        for diag in diags:
-            diag.open_web(tab='data')
-    w.input_window('Deep Link:', open_diags, org)
+# def open_diag_this_path_view(org):
+#     """
+#     https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2590&pathid=11866&startDate=1451050162122&endDate=1451053787270&loadSeqTz=false
+#     Using a deep link as input, find the diagnostic events in the viewed time window of this path
+#     @param creds:
+#     @return:
+#     """
+#     def open_diags(org, deep_link):
+#         link_dict = parse_deep_link(deep_link)
+#         path = org.path_by_id(link_dict['pathid'])
+#         if path == False:
+#             raise ValueError ('Could not find path by ID in this org')
+#         diags = path.find_diags(int(link_dict['startDate'])/1000, int(link_dict['endDate'])/1000)
+#         # diags = diag_de_dupe(diags)
+#         for diag in diags:
+#             diag.open_web(tab='data')
+#     w.input_window('Deep Link:', open_diags, org)
 
 def paths_to_file(paths, filename):
+    """
+    Get all the paths in the org and write them out to a file.
+    Just used this once to solve a problem for Polycom IT?
+    @param paths:
+    @param filename:
+    @return:
+    """
     out_file = open(filename, 'wb')
 
     for path in paths:
@@ -647,25 +846,10 @@ def paths_to_file(paths, filename):
         out_file.write(path.pathName + '\t' + path.ip + '\t' + path.dict['instrumentation'] + '\t' + path.dict['networkType'] + '\t' + path.dict['sourceAppliance'] + '\t' + qos + '\n')
     out_file.close()
 
-'''
-def create_path(path_dict, org):
-    """
-    Use path object information to initiate path on pathview cloud
-    @param path: path object defining the path
-    @return:True for success, False for failure
-    """
-    headers = urllib3.util.make_headers(basic_auth=org.creds.user + ':' + org.creds.password)
-    url = org.creds.pvc + '/pvc-data/v2/path'
-    headers['Content-Type'] = 'application/json'
-    c_path_http =  http.request('POST', url, headers=headers, body=json.dumps(path_dict))
-    c_path_data = json.loads(c_path_http.data)
-    #TODO Now add path to path list in org
-    return c_path_data
-    '''
 
 def find_org(org_name, org_set):
     """
-    Given name of org, search org set for org with name and return org
+    Given name of org, search org set for org with name and return Org
     @param org_name: text string org name
     @param org_set:
     @return:
@@ -675,10 +859,42 @@ def find_org(org_name, org_set):
             return org
     return False
 
-def diag_de_dupe(diag_list):
-    dedupe_list = []
-    for diag in diag_list:
-        if diag not in dedupe_list and diag.bidi not in dedupe_list:
-            dedupe_list.append(diag)
-    return dedupe_list
+'''
 
+Routine for leaky bucket
+
+Set local variable for time now.
+Keep variable for time last entered this routine
+Add tokens into the bucket based on how many milliseconds have elapsed since last entered
+Remove token for this request if available.
+If not available, delay until a token is available.  Can be calculated based on time constants
+'''
+class Bucket():
+    """
+    Class to implement a delay queue of length req_per_window  Calls to bucket.get_token() will return immediately
+     if fewer than req_per_window (integer) calls were made during the last req_window (seconds).  If too many requests
+     have been made, bucket.get_token() sleeps until oldest request was at least req_window seconds before.  This
+     routine is synchronous and blocks execution.
+    """
+    def __init__(self, req_per_window, req_window):
+        self.req_per_window = int(req_per_window * 0.96)
+        self.req_window = req_window
+        self.queue = [datetime.datetime.utcnow()]
+
+    def get_token(self):
+        now = datetime.datetime.utcnow()
+        if len(self.queue) < self.req_per_window:
+            self.queue.append(now)
+        elif len(self.queue) == self.req_per_window:
+            oldest = self.queue[0]
+            self.queue = self.queue[1:]
+            delta = now - oldest
+            delta_sec = (now - oldest).total_seconds()
+            if delta_sec < self.req_window:
+                sleep_time = self.req_window - delta_sec
+                time.sleep(sleep_time)
+                now = datetime.datetime.utcnow()
+            self.queue.append(now)
+        else:
+            raise ValueError ('Bucket queue too long !!!')
+        return True

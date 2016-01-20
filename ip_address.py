@@ -17,8 +17,6 @@ MoscowOTX1, Moscow
 
 '''
 
-import csv
-
 def ipIntToDD(ipAddr):
     ''' Convert integer value < 2^32 to dotted-decimal IP address string
         input: integer < 2^32

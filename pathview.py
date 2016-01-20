@@ -1,10 +1,16 @@
-#TODO Fixed urllib3 and credentials for get_paths, extend to other requests
 #TODO Add ability to find top ten paths with 1-day or 7-day violations
-#TODO Add ability to find paths with QoS violations
 #TODO Test pulling orgs as other than super user
-#TODO Track input from web server up through urllib
+#TODO Add test for appliances that are not connected
+#TODO Find paths with specific alert or not specific alert (e.g. not using Polycom Video or using 'Connectivity') (easy!)
+#TODO Check routine that pulls data from multiple paths, see note below
+'''
+Hi John,
+I wanted to chime in to let you know that when retrieving data from multiple paths and specifying a to and from time you're going to want to put the time in milliseconds. I know this is not consistent with pulling data from a single path and our dev team is looking to correct that.
+Let us know if you have any other questions.
+Shaun
+'''
 
-import pathview_api_functions as pv, ip_address_functions as ip, time, os, csv
+import pathview_api_functions as pv, ip_address_functions as ip, time, csv
 import glob
 
 def choose_org():
@@ -123,33 +129,39 @@ def choose_path_by_ip(org):
     else:
         pv.open_web(pv.create_url_path(pvc, paths3[0]))
 
-def path_param_exceeds(org, creds, measure, threshold):
-    '''
-    Find paths where the specified parameter (initially loss) exceeds the given threshold during the last hour
-    @param org:
-    @param measure:
-    @param threshold:
-    @return:
-    '''
-    #TODO should be able to use existing path_list?
-    all_paths = pv.get_paths(creds, org)
-    paths = []
-    for path in all_paths:
-        measures = pv.get_path_param(creds, path, measure)
-        for minute in measures:
-            found = False
-            for time_key in minute:
-                if minute['value'] >= threshold:
-                    paths.append(path)
-                    found = True
-                    break
-            if found:
-                break
-    return paths
 
 def open_diag():
     raise ValueError('Not defined')
 
+
+def list_and_choose_path(description, path_list):
+    """
+    Takes a list of paths and a description.  Prints out description, then lists paths with an index so user
+    can choose which path to display.  If user chooses a path, opens the web page associated with that path.
+    Stays in this routine until user chooses '0', q etc. or provides no answer, then exits back to calling routine
+    @param description: Text string to be printed before listing paths
+    @param path_list: list of path objects [path1, path2, path3 ..]
+    @return:
+    """
+    pathNum = 0
+    print
+    print description
+    print
+    for path in path_list:
+        pathNum += 1
+        print str(pathNum) + '\t' + path.pathName
+    while True:
+        path_choice = raw_input('Open a path? ').rstrip()
+        if path_choice.lower() in ['q', '', '0', 'quit']:
+            break
+        try:
+            path_choice = int(path_choice)
+        except:
+            break
+
+        if path_choice <= pathNum and path_choice > 0:
+            url = pv.create_url_path(pvc, path_list[path_choice-1])
+            pv.open_web(url)
 
 def menu(options, org):
     print '\n'
@@ -157,12 +169,6 @@ def menu(options, org):
     for key in sorted(options):
         print key + ':', options[key][0]
 
-# def is_csv(filList):
-#     newList = []
-#     for handle in filList:
-#         if (handle.lower()[-4:] == '.csv'):
-#             newList.append(handle)
-#     return newList
 
 def choose_csv():
     """
@@ -188,7 +194,8 @@ def choose_csv():
                     break
 
                 if file_choice <= file_num and file_choice > 0:
-                    return csv_list[file_num-1]
+                    return csv_list[file_choice-1]
+
 
 def create_paths(org):
     """
@@ -196,6 +203,7 @@ def create_paths(org):
     @return: nada
     """
     in_fields = [
+        'org',
         'sourceAppliance',
         'target',
         'applianceInterface',
@@ -224,16 +232,14 @@ def create_paths(org):
             path_dict = {}
             item_num = 0
             if len(in_fields) <> len(row):
-                raise ValueError ('input field does not match in_fields length')
-            elif row[0] <> 'Src':
+                raise ValueError ('Length of file row does not match expected fields length')
+            elif row[0] <> 'Org':
                 for item in row:
                     path_dict[in_fields[item_num]] = item
                     item_num += 1
-                ''' find current org '''
-                # org = pv.find_org(path_dict['orgId'], org_set)
-                #TODO add org to CSV as a check?
-                #TODO check to see if org in file matches current org, if not, offer to change
-                #TODO if org not available to this user, print appropriate error message and quit
+                ''' verify org is current org '''
+                if path_dict['org'] != org.name:
+                    raise ValueError("Org name in CSV file does not match current org.  CSV: " + path_dict['org'] + ' Current: ' + org.name)
                 ''' fix up cells '''
                 if org:
                     ''' add orgId'''
@@ -251,14 +257,42 @@ def create_paths(org):
                 ''' change alertProfileId from name to id value'''
                 path_dict['alertProfileId'] = profile.id
                 org.create_path(path_dict)
+    except ValueError as e:
+        print e
     except:
         raise
 
-"""
+def find_qos_violations(org):
+    """
+    Check all paths in this org, find those that have a QoS change, print list of paths, provide option
+      to write list out in csv format to a file
+    @param org:
+    @return:
+    """
+    mid_path_query = raw_input('Find paths with mid-path violations? ').rstrip()
+    if mid_path_query.lower() in ['y', 'Y', 'yes', 'Yes', 'YES']:
+        qos_path_list, path_no_diag = org.find_paths_qos(by_hop=True)
+    else:
+        qos_path_list, path_no_diag = org.find_paths_qos(by_hop=False)
+
+    print 'Found ' + str(len(qos_path_list)) + ' paths with QoS violations'
+    print 'Found ' + str(len(path_no_diag)) + ' paths with no available diagnostic'
+
+    while True:
+        print
+        print_query = raw_input('Show qos or show no_diag [qos | diag]? ')
+        if print_query.lower() in ['qos', 'y', 'yes']:
+            list_and_choose_path('QoS Violation List', qos_path_list)
+        elif print_query.lower() in ['d', 'diag']:
+            list_and_choose_path('Paths with no diagnostic found', path_no_diag)
+        else:
+            break
+
+'''
 ----------------------------------------------------------------------
                    MAIN
 ----------------------------------------------------------------------
-"""
+'''
 
 options = {
     '0': ['Exit'],
@@ -268,8 +302,9 @@ options = {
     '4': ['Display path by IP address or CIDR subnet'],
     '5': ['Paths with loss in the last hour (slow)'],
     '6': ['Create Paths'],
-    # '7': ['Check org ids']
+    '7': ['Find paths with QoS Changes']
 }
+
 
 txt_files = glob.glob("./*.txt")
 if ".\\user.txt" in txt_files:
@@ -284,7 +319,7 @@ if ".\\user.txt" in txt_files:
         elif id == 'pvc':
             pvc = value
 else:
-    pvc = raw_input("PathView Cloud Address? (inc. https://... ")
+    pvc = raw_input("PathView Cloud Address? (inc. https://... ").rstrip()
     user = raw_input("PathView user name? ").rstrip()
     password = raw_input("PathView password? ").rstrip()
 
@@ -292,6 +327,11 @@ def printem(the_string):
     print the_string
 
 
+def change_org():
+    org = choose_org()
+    org.open_org()
+    org.init_path_set()
+    return org
 
 creds = pv.Credentials(pvc, user, password)
 
@@ -299,44 +339,46 @@ global org_set
 org_set = pv.Org_list(creds).org_list
 
 print
-org = None
-while org == None:
-    org = choose_org()
-org.open_org()
-org.init_path_set()
+org = change_org()
 while True:
     menu(options, org)
     choice = raw_input('\nChoice? ').strip()
     if choice == '0':
         break
     if choice == '1':
-        org = choose_org()
+        org = change_org()
         # if org:
         #     alert_set = org.get_alert_set()
     if choice == '2':
         choose_path(org)
     if choice == '3':
-        pv.open_diag_this_path_view(org)
+        org.open_diag_this_path_view()
     if choice == '4':
         org.choose_path_by_ip()
     if choice == '5':
-        paths3 = path_param_exceeds(org, 'dataLoss', 1)
+        # path_param_exceeds(self, measure, threshold, start=int(time.time())-60*60, end=int(time.time())):
+        measure = 'dataLoss'
+        threshold = 0.01
+        paths = org.path_param_exceeds2(measure, threshold)
         pathNum = 0
-        for path in paths3:
+        print
+        for path in paths:
             pathNum += 1
-            print str(pathNum) + '\t' + path.pathName + '\t' + path.ip
+            print str(pathNum) + '\t' + path.pathName + '\t' + path.target_ip
+        print
         pathChoice = True
         while pathChoice:
             pathChoice = raw_input('Open which path? ').rstrip()
             try:
                 pathCh = int(pathChoice)
                 if pathCh <= pathNum:
-                    key_path = paths3[pathCh-1]
-                    pv.open_web(pv.create_url_path(pvc, key_path))
+                    paths[pathCh-1].open_web()
             except:
                 if pathNum == 'q' or pathNum == 'Q' or pathNum == '' or pathNum == '0':
                     break
-            else:
-                pv.open_web(pv.create_url_path(pvc, paths3[0]))
     if choice == '6':
         create_paths(org)
+    if choice == '7':
+        find_qos_violations(org)
+
+# https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2590&pathid=10891&startDate=1451251082067&endDate=1451257513914&loadSeqTz=false

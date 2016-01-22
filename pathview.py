@@ -247,10 +247,12 @@ def create_paths(org):
                 else:
                     raise ValueError('No matching org found for ' + row)
                 if path_dict['asymmetric'] == 'Single':
-                    ''' change symmetric to true or false '''
+                    ''' change asymmetric to true or false '''
+                    path_dict['asymmetric'] = 'false'
+                elif path_dict['asymmetric'] == 'Double':
                     path_dict['asymmetric'] = 'true'
                 else:
-                    path_dict['asymmetric'] = 'false'
+                    raise ValueError ('Single/Double field value not recognized')
                 ''' find identified alert profile '''
                 alert_set = org.get_alert_set()
                 profile = alert_set.find_alert(path_dict['alertProfileId'])

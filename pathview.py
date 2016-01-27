@@ -3,13 +3,24 @@
 #TODO Add test for appliances that are not connected
 #TODO Find paths with specific alert or not specific alert (e.g. not using Polycom Video or using 'Connectivity') (easy!)
 #TODO Check routine that pulls data from multiple paths, see note below
+#TODO Paths with QoS violation.  Give option to only show paths that have QoS violation before final hop (e.g. 'ignore final hop')
+#TODO How to solve problem of non ietf-8 characters (see Sao Paulo example)
+#TODO Move github update back to source location.  Include cd to the dropbox location.  include 'path' command (optional) to shorten reference to git
+#TODO update 'install' script to set the path command
+'''
+setx PATH "%PATH%;C\Python27"
+must be run as administrator
+can start in idle window but need to call with python otherwise modules can't be found.
+try:  python -m idle.py -r pathview.py
+'''
+
+#TODO Take a look at this problem, see note below from AppNeta, am I handling this?
 '''
 Hi John,
 I wanted to chime in to let you know that when retrieving data from multiple paths and specifying a to and from time you're going to want to put the time in milliseconds. I know this is not consistent with pulling data from a single path and our dev team is looking to correct that.
 Let us know if you have any other questions.
 Shaun
 '''
-
 import pathview_api_functions as pv, ip_address_functions as ip, time, csv
 import glob
 
@@ -225,10 +236,15 @@ def create_paths(org):
     '''
     path_file = open(path_file_name, 'rb')
     path_csv = csv.reader(path_file, delimiter=',', quotechar='"')
+    row_count = 0
     try:
         ''' read in a line from CSV file '''
         for row in path_csv:
+            row_count += 1
             ''' create dict using names from in_fields and values from row '''
+            if row[0] == '':
+                print 'Input file row ' + str(row_count) + ' has no value in Org field, skipping'
+                continue
             path_dict = {}
             item_num = 0
             if len(in_fields) <> len(row):
@@ -256,6 +272,8 @@ def create_paths(org):
                 ''' find identified alert profile '''
                 alert_set = org.get_alert_set()
                 profile = alert_set.find_alert(path_dict['alertProfileId'])
+                if profile == False:
+                    raise ValueError('\n*** Unable to find value: ' + path_dict['alertProfileId'] + 'in Alert Profile list for this Org***')
                 ''' change alertProfileId from name to id value'''
                 path_dict['alertProfileId'] = profile.id
                 org.create_path(path_dict)

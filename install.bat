@@ -17,4 +17,6 @@ C:\Python27\python -m pip install certifi
 REM For calling APIs
 C:\Python27\python -m pip install urllib3
 
+REM Set path variable for python
+setx PATH "%PATH%;C:\Python27"
 

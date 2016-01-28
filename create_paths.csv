@@ -1,4 +1,9 @@
 Org,Src,Target,Interface IP (opt),Group,Single/Double,Name,inboundName (opt),outboundName (opt),type,QoS,Alert Profile
 Polycom Custom Solution Network,NYC-M22-1,76.28.38.236,,JBTest,Single,NYC -> JB Comcast,NYC to Maine,Maine to NYC,WAN,DSCP AF41,Polycom Video
 Polycom Custom Solution Network,NYC-M22-1,98.139.183.24,,JBTest,Single,NYC <-> Yahoo,NYC to Yahoo,Yahoo to NYC,WAN,DSCP AF41,Polycom Video
-Polycom Custom Solution Network,NYC-M22-1,10.222.110.52,,JBTest,Double,NYC <-> AppNeta,NYC to AppNetna,AppNeta to NYC,WAN,DSCP AF41,Polycom Video
+Polycom Custom Solution Network,NYC-M22-1,10.222.110.52,,JBTest,Double,NYC <-> São Paulo,NYC to AppNetna,AppNeta to NYC,WAN,DSCP AF41,Polycom Video
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,

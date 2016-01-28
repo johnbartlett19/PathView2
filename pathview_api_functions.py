@@ -1,7 +1,7 @@
 import requests, datetime, webbrowser, sys, json
 import windows as w
 import ip_address_functions as ip
-import urllib, urllib3, certifi, time
+import urllib, urllib3, certifi, time, locale
 
 http = urllib3.PoolManager(
     cert_reqs = 'CERT_REQUIRED', #Force certificate check
@@ -168,6 +168,7 @@ class Org():
             subnet = ip.Ip4Subnet(ip_needed, 'Subnet')
         #Search thru looking for this IP address or subnet range
         #TODO This looks for paths with this range as target, need to expand to show source paths as well
+         # Missing capability from AppNeta, have submitted request for this
         #TODO Can do this if it is a dual-ended path ..
         for path in paths:
             dst_ip = path.target_ip
@@ -291,7 +292,7 @@ class Org():
         path_no_diag = []
         for path in self.path_set:
             if path.disabled == False:
-                path.qos_change(by_hop)
+                path.qos_change()
                 if path.qos_consistent == False:
                     qos_path_list.append(path)
                 elif (by_hop and path.qos_mid_change):
@@ -453,7 +454,7 @@ class Path():
                 return diag
         return False
 
-    def qos_change(self, check_hops):
+    def qos_change(self):
         """
         build routine in Path class that will find a recent diagnostic, determine QoS changes, and store as local values
         Need:  qos_consistent (True or False)
@@ -461,7 +462,6 @@ class Path():
         This routine takes a 'flush=True' input to force it to go get new data
         If this routine has no data it goes to get new data
         If the data is more than an hour old, it goes to get new data
-        @param check_hops: if True, find paths where qos changes within the path
         @param flush: if True, clear out current data (if any) and fetch new from cloud
         @return: True or False to include this path in the list
         """
@@ -508,13 +508,6 @@ class Path():
             self.qos_changes.append((hop + 1, details[hop]['qosValueMeasured']))
             if details[0]['qosValueMeasured'] != details[hop]['qosValueMeasured']:
                 self.qos_mid_change = True
-        # if check_hops and not self.qos_mid_change:
-        #     return True
-        # elif not check_hops and not self.qos_consistent:
-        #     return True
-        # else:
-        #     return False
-
 
 class Path_list():
     """
@@ -898,3 +891,8 @@ class Bucket():
         else:
             raise ValueError ('Bucket queue too long !!!')
         return True
+
+def reencode(file):
+    for line in file:
+        yield line.decode(locale.getpreferredencoding()).encode('ascii', 'replace')
+

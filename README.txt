@@ -28,15 +28,21 @@ in this file are used for the API Get and Post functions only.
 windows.py:  This file provides a set of routines for opening windows on the desktop, such as the one that is opened
 to paste in a deep-link when searching for diagnostic reports.
 
+run_in_idle.bat:  If you run this bat file it will open the pathview script in the Idle interpreter.  You can then run
+the program by hitting the F5 key.  If there are bugs that cause the program to quit, this will allow you to see the
+error output and send me a screen shot or text capture so I can figure out what is going on.
+
 Using the program:
 
 1) You need a python environment.  This program is written for Python version 2.7.  Download a copy of Python from here:
-http://asdf asdf asdf  #TODO Need correct URL
+https://www.python.org/download/releases/2.7/
+This link is for the Windows MSI package:
+https://www.python.org/ftp/python/2.7.11/python-2.7.11.msi
 
-2) Additional modules are needed to run this program.  These can be installed using the following:
-#TODO build a python program that will install pip and then will install certifi, urllib3 and ???
+2) Additional modules are needed to run this program.  These can be installed using the install.bat file in this
+directory.
 
 3) Create the user.txt file with your credentials (see notes above on user.txt)
 
-4) Double-click the pathivew.py file to start.  You can put a link to this on your desktop or some other convienent place
+4) Double-click the pathview.py file to start.  You can put a link to this on your desktop or some other convenient place
 

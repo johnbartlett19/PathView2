@@ -4,9 +4,7 @@
 #TODO Find paths with specific alert or not specific alert (e.g. not using Polycom Video or using 'Connectivity') (easy!)
 #TODO Check routine that pulls data from multiple paths, see note below
 #TODO Paths with QoS violation.  Give option to only show paths that have QoS violation before final hop (e.g. 'ignore final hop')
-#TODO How to solve problem of non ietf-8 characters (see Sao Paulo example)
 #TODO Move github update back to source location.  Include cd to the dropbox location.  include 'path' command (optional) to shorten reference to git
-#TODO update 'install' script to set the path command
 '''
 setx PATH "%PATH%;C\Python27"
 must be run as administrator
@@ -234,8 +232,19 @@ def create_paths(org):
     '''
         open file and import csv lines, change org name to org ID, use dict to create a path
     '''
-    path_file = open(path_file_name, 'rb')
-    path_csv = csv.reader(path_file, delimiter=',', quotechar='"')
+    path_file = pv.reencode(open(path_file_name, 'rb'))
+    '''
+    def reencode(file):
+    for line in file:
+        yield line.decode('windows-1250').encode('utf-8')
+
+    csv_reader = csv.reader(reencode(open(filepath)), delimiter=";",quotechar='"')
+
+        # .decode(locale.getpreferredencoding())
+    # open('f1').read().decode('utf8')
+    '''
+    path_csv = csv.reader(path_file, dialect='excel', delimiter=',', quotechar='"')
+    # path_csv = csv.reader()
     row_count = 0
     try:
         ''' read in a line from CSV file '''
@@ -289,24 +298,36 @@ def find_qos_violations(org):
     @param org:
     @return:
     """
-    mid_path_query = raw_input('Find paths with mid-path violations? ').rstrip()
-    if mid_path_query.lower() in ['y', 'Y', 'yes', 'Yes', 'YES']:
-        qos_path_list, path_no_diag = org.find_paths_qos(by_hop=True)
-    else:
-        qos_path_list, path_no_diag = org.find_paths_qos(by_hop=False)
-
+    qos_path_list, path_no_diag = org.find_paths_qos()
     print 'Found ' + str(len(qos_path_list)) + ' paths with QoS violations'
     print 'Found ' + str(len(path_no_diag)) + ' paths with no available diagnostic'
 
     while True:
         print
-        print_query = raw_input('Show qos or show no_diag [qos | diag]? ')
+        print_query = raw_input('Show qos or show no_diag [qos | diag]? ').rstrip()
         if print_query.lower() in ['qos', 'y', 'yes']:
-            list_and_choose_path('QoS Violation List', qos_path_list)
+            last_hop = raw_input('Include paths with QoS violation on last hop only? ').rstrip()
+            if last_hop.lower in ['y', 'yes']:
+                list_and_choose_path('QoS Violation List including last hop', qos_path_list)
+            else:
+                qos_filtered_path_list = remove_last_hop_only(qos_path_list)
+                list_and_choose_path('QoS Violation List not including last hop', qos_filtered_path_list)
         elif print_query.lower() in ['d', 'diag']:
             list_and_choose_path('Paths with no diagnostic found', path_no_diag)
         else:
             break
+
+def remove_last_hop_only(qos_path_list):
+    path_list = []
+    for path in qos_path_list:
+        qos_set = path.qos_changes[0]
+        last_only = True
+        for hop in range(1,len(path.qos_changes)-1):
+            if path.qos_changes[hop][1] <> qos_set:
+                last_only = False
+        if not last_only:
+            path_list.append(path)
+    return path_list
 
 '''
 ----------------------------------------------------------------------
@@ -349,8 +370,9 @@ def printem(the_string):
 
 def change_org():
     org = choose_org()
-    org.open_org()
-    org.init_path_set()
+    if org:
+        org.open_org()
+        org.init_path_set()
     return org
 
 creds = pv.Credentials(pvc, user, password)
@@ -360,6 +382,8 @@ org_set = pv.Org_list(creds).org_list
 
 print
 org = change_org()
+if not org:
+    print '*** No org with that name found, please select choice 1 and choose an org ***'
 while True:
     menu(options, org)
     choice = raw_input('\nChoice? ').strip()

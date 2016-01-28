@@ -1,0 +1,1 @@
+C:\Python27\Lib\idlelib\idle.pyw "pathview.py"

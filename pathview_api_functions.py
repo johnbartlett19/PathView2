@@ -39,6 +39,7 @@ class Org():
         self.creds = creds
         self.alert_set = None
         self.bucket = Bucket(req_per_window,req_window)
+        self.appliances = None
 
     def __repr__(self):
         return self.name
@@ -119,6 +120,30 @@ class Org():
         if self.alert_set == None:
             self.alert_set = Alert_list(self)
         return self.alert_set
+
+    def get_appliances (self):
+        """
+        Get the appliance list from this org.  If the appliance list has not been created, create it first
+        @return:
+        """
+        if self.appliances == None:
+            self.init_appliances()
+        return self.appliances
+
+    def init_appliances (self):
+        """
+        Pull info from this org on all appliances and create a list of appliance objects self.path_set
+        @return:
+        """
+        payload = {}
+        payload['orgId'] = self.id
+        page = 1
+        paths = []
+        appliance_http = pathview_http('GET', 'pvc-data/v2/appliance', self.creds, bucket=self.bucket, fields=payload)
+        appliance_set = json.loads(appliance_http.data)
+        self.appliances = []
+        for appl in appliance_set:
+            self.appliances.append(Appliance(self, appl))
 
     def open_org(self):
         base = self.creds.pvc + '/pvc/welcome.html'
@@ -310,6 +335,20 @@ class Org_list():
         for org_dict in org_data:
                 self.org_list.append(Org(org_dict, creds))
 
+class Appliance():
+    """
+    This class represents an appliance attached to an org
+    """
+    def __init__(self, org, appl_dict):
+        self.org = org
+        self.dict = appl_dict
+        self.name = appl_dict['name']
+        self.conn_stat = appl_dict['connectionStatus']
+
+    def __repr__(self):
+        return self.name
+
+
 
 class Path():
     """
@@ -333,6 +372,7 @@ class Path():
         self.qos_diag_time = None
         self.qos_found_diag = None
         self.disabled = path_dict['disabled']
+        self.alertProfileId = path_dict['alertProfileId']
 
     def __repr__(self):
         return self.pathName
@@ -612,15 +652,24 @@ class Alert_list():
         self.alert_set = []
         for alert_dict in alert_dicts:
             self.alert_set.append(Alert(alert_dict))
-    def find_alert(self, profile_name):
+    def find_by_name(self, profile_name):
         """
         Search through alert_set, find alert that has name profile_name and return it
         @param profile_name: name of alert we want to find
-        @param alert_set: list of Alerts
         @return: found Alert or False
         """
         for alert in self.alert_set:
             if alert.name == profile_name:
+                return alert
+        return False
+    def find_by_id(self, profile_id):
+        """
+        Search through alert_set, find alert that has name profile_id and return it
+        @param profile_id: id of alert we want to find
+        @return: found Alert or False
+        """
+        for alert in self.alert_set:
+            if alert.id == profile_id:
                 return alert
         return False
 

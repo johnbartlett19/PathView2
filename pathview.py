@@ -1,6 +1,5 @@
-#TODO Add ability to find top ten paths with 1-day or 7-day violations
-#TODO Test pulling orgs as other than super user
-#TODO Add test for appliances that are not connected
+#TODO Add ability to find top ten paths with 1-day or 7-day violations.  No access to violations in API
+#TODO Format printout of appliance status
 #TODO Find paths with specific alert or not specific alert (e.g. not using Polycom Video or using 'Connectivity') (easy!)
 #TODO Check routine that pulls data from multiple paths, see note below
 #TODO Paths with QoS violation.  Give option to only show paths that have QoS violation before final hop (e.g. 'ignore final hop')
@@ -280,7 +279,7 @@ def create_paths(org):
                     raise ValueError ('Single/Double field value not recognized')
                 ''' find identified alert profile '''
                 alert_set = org.get_alert_set()
-                profile = alert_set.find_alert(path_dict['alertProfileId'])
+                profile = alert_set.find_by_name(path_dict['alertProfileId'])
                 if profile == False:
                     raise ValueError('\n*** Unable to find value: ' + path_dict['alertProfileId'] + 'in Alert Profile list for this Org***')
                 ''' change alertProfileId from name to id value'''
@@ -343,7 +342,8 @@ options = {
     '4': ['Display path by IP address or CIDR subnet'],
     '5': ['Paths with loss in the last hour (slow)'],
     '6': ['Create Paths'],
-    '7': ['Find paths with QoS Changes']
+    '7': ['Find paths with QoS Changes'],
+    '8': ['Show status of appliances']
 }
 
 
@@ -364,9 +364,6 @@ else:
     user = raw_input("PathView user name? ").rstrip()
     password = raw_input("PathView password? ").rstrip()
 
-def printem(the_string):
-    print the_string
-
 
 def change_org():
     org = choose_org()
@@ -374,6 +371,51 @@ def change_org():
         org.open_org()
         org.init_path_set()
     return org
+
+def paths_by_alert(org):
+    all_paths = org.get_path_set()
+    alerts = org.get_alert_set()
+    print 'Paths in this org are using the following alerts'
+    print 'Choose an alert to get a list of paths using that alert'
+    alert_dict = {}
+    for path in all_paths:
+        if path.alertProfileId in alert_dict:
+            alert_dict[path.alertProfileId][0] += 1
+        else:
+            alert_dict[path.alertProfileId] = [1]
+    for profId in alert_dict:
+        alert_dict[profId].append(alerts.find_by_id(profId))
+    print '#', 'Profile', 'Path Count'
+    item_count = 0
+    alert_list = []
+    for profId in alert_dict:
+        item_count += 1
+        print item_count, alert_dict[profId][1].name, alert_dict[profId][0]
+        alert_list.append(profId)
+    #TODO Need to format output so it is nicer
+    print
+    choice = raw_input('Choose alert to list paths, 0 to exit: ').rstrip()
+    if choice in ['0', '', 'n']:
+        return
+    elif int(choice) < len(alert_list):
+        id = alert_list[int(choice)-1]
+        print 'Paths using Alert ' + alert_dict[id][1].name + ':'
+        for path in all_paths:
+            if path.alertProfileId == id:
+                print path.pathName
+    #TODO add while loop to stay here until exit
+
+def find_appliance_connection_status(org):
+    appl_list = org.get_appliances()
+    print 'Appliance\tStatus'
+    for appl in appl_list:
+        print appl.name, appl.conn_stat
+
+'''
+-------------------------------------------------------------------------------------------------------------------------------------------
+  MAIN
+-------------------------------------------------------------------------------------------------------------------------------------------
+'''
 
 creds = pv.Credentials(pvc, user, password)
 
@@ -391,8 +433,6 @@ while True:
         break
     if choice == '1':
         org = change_org()
-        # if org:
-        #     alert_set = org.get_alert_set()
     if choice == '2':
         choose_path(org)
     if choice == '3':
@@ -424,5 +464,7 @@ while True:
         create_paths(org)
     if choice == '7':
         find_qos_violations(org)
-
-# https://polycom.pathviewcloud.com/pvc/pathdetail.html?st=2590&pathid=10891&startDate=1451251082067&endDate=1451257513914&loadSeqTz=false
+    if choice == '8':
+        find_appliance_connection_status(org)
+    if choice == '9':
+        paths_by_alert(org)

@@ -1,17 +1,14 @@
 #TODO Add ability to find top ten paths with 1-day or 7-day violations.  No access to violations in API
-#TODO Format printout of appliance status
-#TODO Find paths with specific alert or not specific alert (e.g. not using Polycom Video or using 'Connectivity') (easy!)
 #TODO Check routine that pulls data from multiple paths, see note below
-#TODO Paths with QoS violation.  Give option to only show paths that have QoS violation before final hop (e.g. 'ignore final hop')
-#TODO Move github update back to source location.  Include cd to the dropbox location.  include 'path' command (optional) to shorten reference to git
+#TODO Pull performance data from multiple paths to reduce time?  10 paths at a time perhaps?  See note below about specifying time windows
 '''
+starting the script in the Idle shell:
 setx PATH "%PATH%;C\Python27"
 must be run as administrator
 can start in idle window but need to call with python otherwise modules can't be found.
 try:  python -m idle.py -r pathview.py
 '''
 
-#TODO Take a look at this problem, see note below from AppNeta, am I handling this?
 '''
 Hi John,
 I wanted to chime in to let you know that when retrieving data from multiple paths and specifying a to and from time you're going to want to put the time in milliseconds. I know this is not consistent with pulling data from a single path and our dev team is looking to correct that.
@@ -306,7 +303,7 @@ def find_qos_violations(org):
         print_query = raw_input('Show qos or show no_diag [qos | diag]? ').rstrip()
         if print_query.lower() in ['qos', 'y', 'yes']:
             last_hop = raw_input('Include paths with QoS violation on last hop only? ').rstrip()
-            if last_hop.lower in ['y', 'yes']:
+            if last_hop.lower() in ['y', 'yes']:
                 list_and_choose_path('QoS Violation List including last hop', qos_path_list)
             else:
                 qos_filtered_path_list = remove_last_hop_only(qos_path_list)
@@ -385,31 +382,33 @@ def paths_by_alert(org):
             alert_dict[path.alertProfileId] = [1]
     for profId in alert_dict:
         alert_dict[profId].append(alerts.find_by_id(profId))
-    print '#', 'Profile', 'Path Count'
-    item_count = 0
-    alert_list = []
-    for profId in alert_dict:
-        item_count += 1
-        print item_count, alert_dict[profId][1].name, alert_dict[profId][0]
-        alert_list.append(profId)
-    #TODO Need to format output so it is nicer
-    print
-    choice = raw_input('Choose alert to list paths, 0 to exit: ').rstrip()
-    if choice in ['0', '', 'n']:
-        return
-    elif int(choice) < len(alert_list):
-        id = alert_list[int(choice)-1]
-        print 'Paths using Alert ' + alert_dict[id][1].name + ':'
-        for path in all_paths:
-            if path.alertProfileId == id:
-                print path.pathName
-    #TODO add while loop to stay here until exit
+    while True:
+        fmt = '\n{0:5s}{1:37s}{2:10s}'
+        print fmt.format('   #', ' Profile', 'Path Count')
+        fmt = '{0:4d}  {1:37s}{2:3d}'
+        item_count = 0
+        alert_list = []
+        for profId in alert_dict:
+            item_count += 1
+            print fmt.format(item_count, alert_dict[profId][1].name, alert_dict[profId][0])
+            alert_list.append(profId)
+        print
+        choice = raw_input('Choose alert to list paths, 0 to exit: ').rstrip()
+        if choice in ['0', '', 'n']:
+            return
+        elif int(choice) < len(alert_list):
+            id = alert_list[int(choice)-1]
+            print '\nPaths using Alert ' + alert_dict[id][1].name + ':'
+            for path in all_paths:
+                if path.alertProfileId == id:
+                    print path.pathName
 
 def find_appliance_connection_status(org):
     appl_list = org.get_appliances()
-    print 'Appliance\tStatus'
+    fmt = '{0:30s}{1:10s}'
+    print fmt.format('Appliance', 'Status')
     for appl in appl_list:
-        print appl.name, appl.conn_stat
+        print fmt.format(appl.name, appl.conn_stat)
 
 '''
 -------------------------------------------------------------------------------------------------------------------------------------------

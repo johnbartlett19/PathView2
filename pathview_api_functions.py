@@ -184,29 +184,56 @@ class Org():
         return filtered_list
 
     def choose_path_by_ip(self):
+        '''
+        Input from user an IP address or a CIDER subnet
+        Search through org paths for any path whose source or target matches the IP or subnet
+        Display a list of those paths by name and allow the user to open them in a browser
+        @return: nothing
+        '''
+        def match_ip (ipaddr, ip_needed, subnet=None):
+            '''
+            Determine if ipaddr matches target IP or subnet
+            @param ipaddr: IP to check
+            @param ip_neede:  IP address or CIDR subnet to match against
+            @return: True for match, False otherwise
+            '''
+            if subnet:
+                try:
+                    ip_decimal = ip.ipDDtoInt(ipaddr)
+                    if ip_decimal > subnet.base and ip_decimal < subnet.top:
+                        return True
+                except:
+                    print 'Can not evaulate dest address ' + ipaddr + ' , ignoring path.'
+                    return False
+            else:
+                if ip_needed == ipaddr:
+                    return True
+            return False
+
         #Query user for IP address
         ip_needed = raw_input('Target IP address? ').rstrip()
-        is_subnet = '/' in ip_needed
         paths = self.get_path_set()
+        #Search thru looking for this IP address or subnet range in target
         paths2 = []
-        if is_subnet:
+        # if match_ip()
+        subnet = None
+        is_subnet = '/' in ip_needed
+        if  '/' in ip_needed:
             subnet = ip.Ip4Subnet(ip_needed, 'Subnet')
-        #Search thru looking for this IP address or subnet range
-        #TODO This looks for paths with this range as target, need to expand to show source paths as well
-         # Missing capability from AppNeta, have submitted request for this
-        #TODO Can do this if it is a dual-ended path ..
         for path in paths:
-            dst_ip = path.target_ip
-            if is_subnet:
-                try:
-                    ip_decimal = ip.ipDDtoInt(dst_ip)
-                    if ip_decimal > subnet.base and ip_decimal < subnet.top:
+            if match_ip(path.target_ip, ip_needed, subnet=subnet):
+                paths2.append(path)
+            if path.interface:
+                if match_ip(path.interface, ip_needed, subnet=subnet):
+                    if path not in paths2:
                         paths2.append(path)
-                except:
-                    print 'Can not evaulate dest address ' + dst_ip + ' , ignoring path.'
             else:
-                if ip_needed == dst_ip:
-                    paths2.append(path)
+                for addr in path.appliance.local_net:
+                    if match_ip(addr, ip_needed, subnet=subnet):
+                        if path not in paths2:
+                            paths2.append(path)
+
+        # Sort paths into list and print for user
         paths3 = sorted(paths2, key=lambda k: k.pathName)
         if len(paths3) == 0:
             print 'No matching path found'
@@ -223,7 +250,6 @@ class Org():
                 try:
                     pathCh = int(pathChoice)
                     if pathCh <= pathNum:
-                        # pv.open_web(pv.create_url_path(pvc, paths3[pathCh-1]))
                         path.open_web()
                 except:
                     if pathNum == 'q' or pathNum == 'Q' or pathNum == '' or pathNum == '0':
@@ -289,7 +315,7 @@ class Org():
             # Add values into path object if they are available
             if path.id in param_dict:
                 path.set_path_parameters(param_dict[path.id])
-            # Add that path to new list of paths to be evaluated below
+                # Add that path to new list of paths to be evaluated below
                 paths_with_params.append(path)
         paths = []
         for path in paths_with_params:
@@ -344,10 +370,10 @@ class Appliance():
         self.dict = appl_dict
         self.name = appl_dict['name']
         self.conn_stat = appl_dict['connectionStatus']
+        self.local_net = appl_dict['localNetworkInterfaces']
 
     def __repr__(self):
         return self.name
-
 
 
 class Path():
@@ -373,6 +399,11 @@ class Path():
         self.qos_found_diag = None
         self.disabled = path_dict['disabled']
         self.alertProfileId = path_dict['alertProfileId']
+        self.interface = path_dict['applianceInterface']
+        for appliance in self.org.get_appliances():
+            if appliance.name == path_dict['sourceAppliance']:
+                self.appliance = appliance
+                break
 
     def __repr__(self):
         return self.pathName
@@ -452,7 +483,7 @@ class Path():
                 # if yes, check if bidi on list, remove both
                 return_set.append(diag)
                 for x in range(1,len(diag_dict_list)):
-                    if diag.bidi_id == diag_dict_list[x]['testId']:
+                    if diag.bidi and diag.bidi.id == diag_dict_list[x]['testId']:
                         diag_dict_list = diag_dict_list[:x] + diag_dict_list[x+1:]
                         break
                 diag_dict_list = diag_dict_list[1:]
@@ -544,9 +575,10 @@ class Path():
             self.qos_consistent = False
         self.qos_changes = [details[0]['qosValueSet']]
         self.qos_mid_change = False
-        for hop in range(hop_count):
+        for hop in range(hop_count - 1):
             self.qos_changes.append((hop + 1, details[hop]['qosValueMeasured']))
-            if details[0]['qosValueMeasured'] != details[hop]['qosValueMeasured']:
+            if details[0]['qosValueMeasured'] != details[hop]['qosValueMeasured'] and \
+                    (not (details[hop]['qosValueMeasured'] == -1)):
                 self.qos_mid_change = True
 
 class Path_list():
@@ -941,7 +973,60 @@ class Bucket():
             raise ValueError ('Bucket queue too long !!!')
         return True
 
+
 def reencode(file):
     for line in file:
         yield line.decode(locale.getpreferredencoding()).encode('ascii', 'replace')
 
+
+def list_and_choose_path(description, path_list, window_param=None):
+    """
+    Takes a list of paths and a description.  Prints out description, then lists paths with an index so user
+    can choose which path to display.  If user chooses a path, opens the web page associated with that path.
+    Stays in this routine until user chooses '0', q etc. or provides no answer, then exits back to calling routine
+    @param description: Text string to be printed before listing paths
+    @param path_list: list of path objects [path1, path2, path3 ..]
+    @return:
+    """
+    if window_param:
+        start, end = view_window(window_param)
+    pathNum = 0
+    print
+    print description
+    print
+    for path in path_list:
+        pathNum += 1
+        print str(pathNum) + '\t' + path.pathName
+    while True:
+        path_choice = raw_input('Open a path? ').rstrip()
+        if path_choice.lower() in ['q', '', '0', 'quit']:
+            break
+
+        if path_choice in ['all']:
+            for path in path_list:
+                path.open_web(start=start, end=end)
+            break
+        try:
+            path_choice = int(path_choice)
+        except:
+            break
+        if path_choice <= pathNum and path_choice > 0:
+            path_to_open = path_list[path_choice-1]
+            path_to_open.open_web(start=start, end=end)
+
+def view_window(window_param):
+    size, unit = window_param
+    end_sec = int(time.time())
+    if unit not in ['sec', 'min', 'hour', 'day', 'month']:
+        raise ValueError("Don't recognize unit of time " + unit)
+    elif unit == 'sec':
+        multiplier = 1
+    elif unit == 'min':
+        multiplier = 60
+    elif unit == 'hour':
+        multiplier = 60*60
+    elif unit == 'day':
+        multiplier = 60*60*24
+    elif unit == 'month':
+        multiplier = 60*60*24*30
+    return (end_sec - multiplier * size, end_sec)

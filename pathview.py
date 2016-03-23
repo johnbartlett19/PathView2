@@ -1,6 +1,9 @@
 #TODO Add ability to find top ten paths with 1-day or 7-day violations.  No access to violations in API
 #TODO Check routine that pulls data from multiple paths, see note below
 #TODO Pull performance data from multiple paths to reduce time?  10 paths at a time perhaps?  See note below about specifying time windows
+#TODO Fix show paths with Alert to list paths and allow path choice for display.  This should use a common subroutine?
+#TODO When listing paths for QoS check, show count (e.g. path 1 of 117) to show progress
+#TODO Does qos analysis look at both directions of bi-directional paths?
 '''
 starting the script in the Idle shell:
 setx PATH "%PATH%;C\Python27"
@@ -37,12 +40,17 @@ def choose_org():
             for org in possible_sorted:
                 count += 1
                 print count, org.name
-            index = int(raw_input('Which org to use? '))
-            if index <= len(possible_sorted) and index > 0:
-                return possible_sorted[index-1]
-            else:
-                print '*** Number not found in possible org list ***'
+            index = raw_input('Which org to use? ')
+            if index in ['0','','exit']:
                 return None
+            try:
+                index = int(index)
+                if index <= len(possible_sorted) and index > 0:
+                    return possible_sorted[index-1]
+                else:
+                    print '*** Number not found in possible org list ***'
+            except:
+                pass
 
 def choose_path(org):
     #Example URL to create:
@@ -53,124 +61,19 @@ def choose_path(org):
     @return: none
     """
     partial_name = raw_input('Partial path name? ').rstrip()
-    end_sec = int(time.time())
-    start_sec = end_sec - (24 * 60 * 60) # one day
-    end = end_sec * 1000 # milliseconds
-    start = start_sec * 1000 # milliseconds
     # filter = {'name':'*' + partial_name.lower() + '*'}
     path_list = org.get_path_set()
     paths_unsorted = []
     for path in path_list:
         if partial_name.lower() in path.pathName.lower():
             paths_unsorted.append(path)
-    paths = sorted(paths_unsorted, key=lambda k: k.pathName)
-    if len(paths) == 0:
-        print 'No matching path found'
-    elif len(paths) > 1:
-        pathNum = 0
-        for path in paths:
-            pathNum += 1
-            print str(pathNum) + '\t' + path.pathName
-        pathChoice = True
-        while pathChoice:
-            pathCh = raw_input('Open which path? ').rstrip()
-            if pathCh == 'q' or pathCh == 'Q' or pathCh == '' or pathCh == '0':
-                break
-            try:
-                pathCh = int(pathCh)
-            except:
-                break
+    pv.list_and_choose_path('Paths with partial name ' + partial_name, paths_unsorted, window_param=(24,'hour'))
 
-            if pathCh <= pathNum and pathCh > 0:
-                url = pv.create_url_path(pvc, paths[pathCh-1], start, end)
-                pv.open_web(url)
-                # pv.open_web(pv.create_url_path(pvc, paths3[pathCh-1], start, end))
-    else:
-        pv.open_web(pv.create_url_path(pvc, paths[0], start, end))
-
-def choose_path_by_ip(org):
-    #Query user for IP address
-    ip_needed = raw_input('Target IP address? ').rstrip()
-    is_subnet = '/' in ip_needed
-    if is_subnet:
-        subnet = ip.Ip4Subnet(ip_needed, 'Subnet')
-        #Find all paths in the org
-        paths = pv.get_paths(creds, org)
-    else:
-        paths = pv.get_paths(creds, org, target=ip_needed)
-    paths2 = []
-    #Search thru looking for this IP address or subnet range
-    for path in paths:
-        if path.ip == '10.252.0.30':
-            asdf = 1
-        if is_subnet:
-            try:
-                ip_decimal = ip.ipDDtoInt(path.ip)
-                if ip_decimal > subnet.base and ip_decimal < subnet.top:
-                    paths2.append(path)
-            except:
-                print 'Can not evaulate dest address ' + path.ip + ' , ignoring path.'
-        else:
-            if ip_needed == path.ip:
-                paths2.append(path)
-    paths3 = sorted(paths2, key=lambda k: k.pathName)
-    if len(paths3) == 0:
-        print 'No matching path found'
-    elif len(paths3) > 1:
-        pathNum = 0
-        for path in paths3:
-            pathNum += 1
-            print str(pathNum) + '\t' + path.pathName + '\t' + path.ip
-        pathChoice = True
-        while pathChoice:
-            pathChoice = raw_input('Open which path? ').rstrip()
-            try:
-                pathCh = int(pathChoice)
-                if pathCh <= pathNum:
-                    pv.open_web(pv.create_url_path(pvc, paths3[pathCh-1]))
-            except:
-                if pathNum == 'q' or pathNum == 'Q' or pathNum == '' or pathNum == '0':
-                    break
-    else:
-        pv.open_web(pv.create_url_path(pvc, paths3[0]))
-
-
-def open_diag():
-    raise ValueError('Not defined')
-
-
-def list_and_choose_path(description, path_list):
-    """
-    Takes a list of paths and a description.  Prints out description, then lists paths with an index so user
-    can choose which path to display.  If user chooses a path, opens the web page associated with that path.
-    Stays in this routine until user chooses '0', q etc. or provides no answer, then exits back to calling routine
-    @param description: Text string to be printed before listing paths
-    @param path_list: list of path objects [path1, path2, path3 ..]
-    @return:
-    """
-    pathNum = 0
-    print
-    print description
-    print
-    for path in path_list:
-        pathNum += 1
-        print str(pathNum) + '\t' + path.pathName
-    while True:
-        path_choice = raw_input('Open a path? ').rstrip()
-        if path_choice.lower() in ['q', '', '0', 'quit']:
-            break
-        try:
-            path_choice = int(path_choice)
-        except:
-            break
-
-        if path_choice <= pathNum and path_choice > 0:
-            url = pv.create_url_path(pvc, path_list[path_choice-1])
-            pv.open_web(url)
 
 def menu(options, org):
     print '\n'
     print 'Org:', org
+    print 'Path count: ', len(org.path_set)
     for key in sorted(options):
         print key + ':', options[key][0]
 
@@ -294,34 +197,29 @@ def find_qos_violations(org):
     @param org:
     @return:
     """
+    #TODO - don't count intermediate hops where QoS is listed as '-'
     qos_path_list, path_no_diag = org.find_paths_qos()
     print 'Found ' + str(len(qos_path_list)) + ' paths with QoS violations'
     print 'Found ' + str(len(path_no_diag)) + ' paths with no available diagnostic'
-
     while True:
         print
         print_query = raw_input('Show qos or show no_diag [qos | diag]? ').rstrip()
         if print_query.lower() in ['qos', 'y', 'yes']:
             last_hop = raw_input('Include paths with QoS violation on last hop only? ').rstrip()
             if last_hop.lower() in ['y', 'yes']:
-                list_and_choose_path('QoS Violation List including last hop', qos_path_list)
+                pv.list_and_choose_path('QoS Violation List including last hop', qos_path_list, window_param=(1,'day'))
             else:
                 qos_filtered_path_list = remove_last_hop_only(qos_path_list)
-                list_and_choose_path('QoS Violation List not including last hop', qos_filtered_path_list)
+                pv.list_and_choose_path('QoS Violation List not including last hop', qos_filtered_path_list, window_param=(1,'day'))
         elif print_query.lower() in ['d', 'diag']:
-            list_and_choose_path('Paths with no diagnostic found', path_no_diag)
+            pv.list_and_choose_path('Paths with no diagnostic found', path_no_diag, window_param=(30, 'day'))
         else:
             break
 
 def remove_last_hop_only(qos_path_list):
     path_list = []
     for path in qos_path_list:
-        qos_set = path.qos_changes[0]
-        last_only = True
-        for hop in range(1,len(path.qos_changes)-1):
-            if path.qos_changes[hop][1] <> qos_set:
-                last_only = False
-        if not last_only:
+        if path.qos_mid_change:
             path_list.append(path)
     return path_list
 
@@ -340,7 +238,8 @@ options = {
     '5': ['Paths with loss in the last hour (slow)'],
     '6': ['Create Paths'],
     '7': ['Find paths with QoS Changes'],
-    '8': ['Show status of appliances']
+    '8': ['Show status of appliances'],
+    '9': ['Show paths using a specific Alert Profile']
 }
 
 
@@ -396,12 +295,15 @@ def paths_by_alert(org):
         choice = raw_input('Choose alert to list paths, 0 to exit: ').rstrip()
         if choice in ['0', '', 'n']:
             return
-        elif int(choice) < len(alert_list):
+        elif int(choice) <= len(alert_list):
             id = alert_list[int(choice)-1]
-            print '\nPaths using Alert ' + alert_dict[id][1].name + ':'
+            message = '\nPaths using Alert ' + alert_dict[id][1].name + ':'
+            path_list = []
             for path in all_paths:
                 if path.alertProfileId == id:
-                    print path.pathName
+                    path_list.append(path)
+            start = 1
+            pv.list_and_choose_path(message, path_list, window_param=(1, 'day'))
 
 def find_appliance_connection_status(org):
     appl_list = org.get_appliances()
@@ -410,6 +312,13 @@ def find_appliance_connection_status(org):
     for appl in appl_list:
         print fmt.format(appl.name, appl.conn_stat)
 
+def find_paths_by_loss(org):
+    # path_param_exceeds(self, measure, threshold, start=int(time.time())-60*60, end=int(time.time())):
+        # TODO convert this to use the standard listing procedure if possible
+    measure = 'dataLoss'
+    threshold = 0.01 # 1% loss
+    paths = org.path_param_exceeds2(measure, threshold)
+    pv.list_and_choose_path('Paths with Packet Loss', paths, (1, 'hour'))
 '''
 -------------------------------------------------------------------------------------------------------------------------------------------
   MAIN
@@ -422,9 +331,11 @@ global org_set
 org_set = pv.Org_list(creds).org_list
 
 print
-org = change_org()
-if not org:
-    print '*** No org with that name found, please select choice 1 and choose an org ***'
+org = None
+while not org:
+    org = change_org()
+    if not org:
+        print '*** No org with that name found, please select another ***'
 while True:
     menu(options, org)
     choice = raw_input('\nChoice? ').strip()
@@ -439,26 +350,7 @@ while True:
     if choice == '4':
         org.choose_path_by_ip()
     if choice == '5':
-        # path_param_exceeds(self, measure, threshold, start=int(time.time())-60*60, end=int(time.time())):
-        measure = 'dataLoss'
-        threshold = 0.01
-        paths = org.path_param_exceeds2(measure, threshold)
-        pathNum = 0
-        print
-        for path in paths:
-            pathNum += 1
-            print str(pathNum) + '\t' + path.pathName + '\t' + path.target_ip
-        print
-        pathChoice = True
-        while pathChoice:
-            pathChoice = raw_input('Open which path? ').rstrip()
-            try:
-                pathCh = int(pathChoice)
-                if pathCh <= pathNum:
-                    paths[pathCh-1].open_web()
-            except:
-                if pathNum == 'q' or pathNum == 'Q' or pathNum == '' or pathNum == '0':
-                    break
+        find_paths_by_loss(org)
     if choice == '6':
         create_paths(org)
     if choice == '7':

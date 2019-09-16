@@ -38,6 +38,7 @@ class Org():
         self.path_set = None
         self.creds = creds
         self.alert_set = None
+        self.groups = None
         self.bucket = Bucket(req_per_window,req_window)
         self.appliances = None
 
@@ -60,7 +61,7 @@ class Org():
         while(1):
             payload['page'] = page
             payload['limit'] = page_len
-            path_set = pathview_http('GET', 'pvc-data/v2/path', self.creds, bucket=self.bucket, fields=payload)
+            path_set = pathview_http('GET', 'pvc-data/v3/path', self.creds, bucket=self.bucket, fields=payload)
             path_page = json.loads(path_set.data)
             paths += path_page
             if len(path_page) < page_len:
@@ -77,7 +78,7 @@ class Org():
         @return:True for success, False for failure
         """
         headers = urllib3.util.make_headers(basic_auth=self.creds.user + ':' + self.creds.password)
-        url = self.creds.pvc + '/pvc-data/v2/path'
+        url = self.creds.pvc + '/pvc-data/v3/path'
         headers['Content-Type'] = 'application/json'
         self.bucket.get_token()
         c_path_http =  http.request('POST', url, headers=headers, body=json.dumps(path_dict))
@@ -118,11 +119,21 @@ class Org():
     def get_alert_set(self):
         """
         Return this org's alert set.  If alert set info has not been pulled, do it now
-        @return:
+        @return: self.alert_set
         """
-        if self.alert_set == None:
-            self.alert_set = Alert_list(self)
         return self.alert_set
+
+    def get_groups(self):
+        """
+        Return list of groups used in this org.
+        @return: array of group names
+        """
+        if self.groups == None:
+            self.groups = []
+            for path in self.path_set:
+                if path.group not in self.groups:
+                    self.groups.append(path.group)
+        return self.groups
 
     def get_appliances (self):
         """
@@ -142,7 +153,7 @@ class Org():
         payload['orgId'] = self.id
         page = 1
         paths = []
-        appliance_http = pathview_http('GET', 'pvc-data/v2/appliance', self.creds, bucket=self.bucket, fields=payload)
+        appliance_http = pathview_http('GET', 'pvc-data/v3/appliance', self.creds, bucket=self.bucket, fields=payload)
         appliance_set = json.loads(appliance_http.data)
         self.appliances = []
         for appl in appliance_set:
@@ -305,7 +316,7 @@ class Org():
             if not path.dict['disabled']:
                 id_list.append(('pathIds',path.id))
         path_requests = urllib.parse.urlencode(id_list)
-        url = 'pvc-data/v2/path/data' + '?' + path_requests
+        url = 'pvc-data/v3/path/data' + '?' + path_requests
         req = pathview_http('GET', url, self.creds, bucket=self.bucket)
         data = json.loads(req.data)
         # Build a dictionary with results in form: key=pathId, value = dict
@@ -394,6 +405,7 @@ class Path():
     def __init__(self, org, path_dict):
         self.dict = path_dict
         self.pathName = path_dict['pathName']
+        self.group = path_dict['groupName']
         self.target_ip = path_dict['target']
         self.id = path_dict['id']
         self.org = org
@@ -433,7 +445,7 @@ class Path():
             success = False
             while not success:
                 try:
-                    path_http = pathview_http('GET', 'pvc-data/v2/path/' + str(self.id) + '/data', self.org.creds, bucket=self.bucket,)
+                    path_http = pathview_http('GET', 'pvc-data/v3/path/' + str(self.id) + '/data', self.org.creds, bucket=self.bucket,)
                     self.parameters = json.loads(path_http.data)
                     success = True
                 except:
@@ -639,9 +651,9 @@ class Diag():
         if self.test_status == 'Failed':
             return False
         if self.detail == None:
-            # https://polycom.pathviewcloud.com/pvc-data/v2/diagnostic/4021646/detail
+            # https://polycom.pathviewcloud.com/pvc-data/v3/diagnostic/4021646/detail
             arguments = {'id':self.id}
-            detail_http = pathview_http('GET', 'pvc-data/v2/diagnostic/' + str(self.id) + '/detail', self.creds, bucket=self.org.bucket,  fields=arguments)
+            detail_http = pathview_http('GET', 'pvc-data/v3/diagnostic/' + str(self.id) + '/detail', self.creds, bucket=self.org.bucket,  fields=arguments)
             if detail_http.data == '':
                 return False
             detail_dicts = json.loads(detail_http.data)
@@ -686,7 +698,7 @@ class Alert():
 class Alert_list():
     def __init__(self, org):
         arguments = {'orgId':org.id}
-        alert_http = pathview_http('GET', 'pvc-data/v2/alertProfile', org.creds, bucket=org.bucket, fields=arguments)
+        alert_http = pathview_http('GET', 'pvc-data/v3/alertProfile', org.creds, bucket=org.bucket, fields=arguments)
         alert_dicts = json.loads(alert_http.data)
         self.alert_set = []
         for alert_dict in alert_dicts:
@@ -1005,6 +1017,7 @@ def list_and_choose_path(description, path_list, window_param=None):
         pathNum += 1
         print(str(pathNum) + '\t' + path.pathName)
     while True:
+        print()
         path_choice = input('Open a path? ').rstrip()
         if path_choice.lower() in ['q', '', '0', 'quit']:
             break

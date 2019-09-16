@@ -3,6 +3,7 @@ REM This is incomplete and not tested
 
 REM Download python here:
 ECHO Download python here:
+ECHO This has not been updated to reflect python3 usage, but code has been updated
 ECHO https://www.python.org/ftp/python/2.7.11/python-2.7.11.msi
 REM Set user path to include python
 set PATH=%PATH%;C:\Python27

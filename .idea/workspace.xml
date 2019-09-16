@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="e7bffd5c-419f-493a-a1bf-200c5da4f184" name="Default" comment="Fixed bug on qos paths, didn't allow 'yes' answer to work, missing ()">
-      <change beforePath="$PROJECT_DIR$/.idea/PathView.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/PathView.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="e7bffd5c-419f-493a-a1bf-200c5da4f184" name="Default" comment="Partial update to support AppNeta API V3 and to support Python V3, more AppNeta API V3 changes to come.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/create_paths.xlsx" beforeDir="false" afterPath="$PROJECT_DIR$/create_paths.xlsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/install.bat" beforeDir="false" afterPath="$PROJECT_DIR$/install.bat" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pathview.py" beforeDir="false" afterPath="$PROJECT_DIR$/pathview.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pathview_api_functions.py" beforeDir="false" afterPath="$PROJECT_DIR$/pathview_api_functions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/windows.py" beforeDir="false" afterPath="$PROJECT_DIR$/windows.py" afterDir="false" />
     </list>
     <ignored path="PathView.iws" />
     <ignored path=".idea/workspace.xml" />
@@ -30,12 +27,21 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/pathview_api_functions.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-22">
-              <caret line="49" column="8" selection-start-line="49" selection-start-column="8" selection-end-line="49" selection-end-column="8" />
+            <state relative-caret-position="363">
+              <caret line="1024" column="34" lean-forward="true" selection-start-line="1024" selection-start-column="34" selection-end-line="1024" selection-end-column="34" />
               <folding>
                 <element signature="e#0#48#0" expanded="true" />
                 <element signature="e#623#793#0" />
               </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$APPLICATION_HOME_DIR$/helpers/pydev/_pydev_imps/_pydev_execfile.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="289">
+              <caret line="17" selection-start-line="17" selection-end-line="17" />
             </state>
           </provider>
         </entry>
@@ -91,11 +97,20 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/pathview.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="182">
-              <caret line="313" column="25" selection-start-line="313" selection-start-column="25" selection-end-line="313" selection-end-column="25" />
+            <state relative-caret-position="193">
+              <caret line="315" column="45" selection-start-line="315" selection-start-column="45" selection-end-line="315" selection-end-column="45" />
               <folding>
                 <element signature="e#830#870#0" expanded="true" />
               </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$USER_HOME$/AppData/Local/Programs/Python/Python37/Lib/codecs.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="192">
+              <caret line="309" selection-start-line="309" selection-end-line="309" />
             </state>
           </provider>
         </entry>
@@ -120,12 +135,22 @@
       <find>def change_</find>
       <find>Bucket</find>
       <find>req_per_window</find>
+      <find>/v2/</find>
+      <find>def path_by_alert</find>
+      <find>def paths_by_alert</find>
+      <find>class Path</find>
+      <find>self.groups</find>
+      <find>group</find>
+      <find>options</find>
+      <find>'10'</find>
+      <find>def find_by_id</find>
     </findStrings>
     <replaceStrings>
       <replace>!=</replace>
       <replace>input</replace>
       <replace>'r'</replace>
       <replace>print(</replace>
+      <replace>/v3/</replace>
     </replaceStrings>
   </component>
   <component name="FindManager">
@@ -141,8 +166,9 @@
       <list>
         <option value="$PROJECT_DIR$/user.txt.jb_test" />
         <option value="$PROJECT_DIR$/windows.py" />
-        <option value="$PROJECT_DIR$/pathview.py" />
         <option value="$PROJECT_DIR$/user.txt" />
+        <option value="$PROJECT_DIR$/install.bat" />
+        <option value="$PROJECT_DIR$/pathview.py" />
         <option value="$PROJECT_DIR$/pathview_api_functions.py" />
       </list>
     </option>
@@ -176,7 +202,7 @@
     </panes>
   </component>
   <component name="PropertiesComponent">
-    <property name="ChangesBrowser.SHOW_FLATTEN" value="false" />
+    <property name="ChangesTree.GroupingKeys" value="directory&#10;module" />
     <property name="FileHistory.git4idea.history.GitHistoryProvider_flatOrder0" value="0" />
     <property name="FileHistory.git4idea.history.GitHistoryProvider_flatOrder1" value="1" />
     <property name="FileHistory.git4idea.history.GitHistoryProvider_flatOrder2" value="2" />
@@ -344,7 +370,7 @@
       <workItem from="1567025680810" duration="2614000" />
       <workItem from="1568041917827" duration="38000" />
       <workItem from="1568394600235" duration="4038000" />
-      <workItem from="1568483875886" duration="980000" />
+      <workItem from="1568483875886" duration="7484000" />
     </task>
     <task id="LOCAL-00001" summary="Create paths working, not well tested.&#10;Now checks for local login/password file">
       <created>1450189188661</created>
@@ -423,11 +449,18 @@
       <option name="project" value="LOCAL" />
       <updated>1457031257365</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Partial update to support AppNeta API V3 and to support Python V3, more AppNeta API V3 changes to come.">
+      <created>1568646112177</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1568646112177</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="9397000" />
+    <option name="totallyTimeSpent" value="15901000" />
   </component>
   <component name="TodoView">
     <todo-panel id="selected-file">
@@ -439,16 +472,15 @@
     </todo-panel>
   </component>
   <component name="ToolWindowManager">
-    <frame x="228" y="118" width="1620" height="890" extended-state="0" />
-    <editor active="true" />
+    <frame x="-8" y="-8" width="1936" height="1066" extended-state="6" />
     <layout>
-      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.15384616" />
+      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.12793177" />
       <window_info id="Structure" order="1" weight="0.30038023" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Find" order="1" weight="0.32947233" />
       <window_info anchor="bottom" id="Run" order="2" />
-      <window_info active="true" anchor="bottom" id="Debug" order="3" visible="true" weight="0.42800528" />
+      <window_info active="true" anchor="bottom" id="Debug" order="3" visible="true" weight="0.3504823" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="6" weight="0.32493368" />
@@ -490,32 +522,40 @@
     <MESSAGE value="Added fix for non UTF-8 characters, substitutes a '?'&#10;Added feature to only list qos path violations if change is before final hop&#10;Updated README file with correct download URLs &amp; more&#10;Included run_in_idle.bat file" />
     <MESSAGE value="Added #8, pull appliance status and show connected vs not connected." />
     <MESSAGE value="Fixed bug on qos paths, didn't allow 'yes' answer to work, missing ()" />
-    <option name="LAST_COMMIT_MESSAGE" value="Fixed bug on qos paths, didn't allow 'yes' answer to work, missing ()" />
+    <MESSAGE value="Partial update to support AppNeta API V3 and to support Python V3, more AppNeta API V3 changes to come." />
+    <option name="LAST_COMMIT_MESSAGE" value="Partial update to support AppNeta API V3 and to support Python V3, more AppNeta API V3 changes to come." />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" type="python-line">
           <url>file://$PROJECT_DIR$/pathview_api_functions.py</url>
-          <line>493</line>
+          <line>505</line>
           <option name="timeStamp" value="293" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="python-line">
           <url>file://$PROJECT_DIR$/pathview_api_functions.py</url>
-          <line>492</line>
+          <line>504</line>
           <option name="timeStamp" value="294" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="python-line">
           <url>file://$PROJECT_DIR$/pathview_api_functions.py</url>
-          <line>740</line>
+          <line>752</line>
           <option name="timeStamp" value="319" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/pathview_api_functions.py</url>
-          <line>733</line>
+          <line>745</line>
           <option name="timeStamp" value="331" />
         </line-breakpoint>
       </breakpoints>
+      <default-breakpoints>
+        <breakpoint type="python-exception">
+          <properties notifyOnTerminate="true" exception="BaseException">
+            <option name="notifyOnTerminate" value="true" />
+          </properties>
+        </breakpoint>
+      </default-breakpoints>
     </breakpoint-manager>
     <watches-manager>
       <configuration name="PythonConfigurationType">
@@ -524,52 +564,57 @@
     </watches-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/PathView$pathview.coverage" NAME="pathview Coverage Results" MODIFIED="1568483977406" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PathView$pathview.coverage" NAME="pathview Coverage Results" MODIFIED="1568652473489" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
   <component name="debuggerHistoryManager">
     <expressions id="evaluateExpression">
       <expression>
-        <expression-string>diag_list</expression-string>
+        <expression-string>group_dict[group_keys[id]][1]</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>diag_list == False</expression-string>
+        <expression-string>group_dict[group_keys[id]]</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>type(date_time_value) is int</expression-string>
+        <expression-string>group_keys[id]</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>type(date_time_value) == 'int'</expression-string>
+        <expression-string>group_keys[id][1]</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>type(date_time_value)</expression-string>
+        <expression-string>list1[int(choice)-1]</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>int(int(linkDict['startDate'])/1000)</expression-string>
+        <expression-string>int(choice)-1</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>int(linkDict['startDate'])/1000</expression-string>
+        <expression-string>group_dict[path.group][0] = group_dict[path.group][0] + 1</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>int(linkDict['startDate'])</expression-string>
+        <expression-string>group_dict[path.group][0] += 1</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
       <expression>
-        <expression-string>(linkDict['startDate'])</expression-string>
+        <expression-string>group_dict[path.group][0] + 1</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>group_dict[path.group][1]</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
@@ -632,9 +677,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/create_paths.csv">
-      <provider selected="true" editor-type-id="text-editor" />
-    </entry>
     <entry file="file://C:/Python27/Lib/json/__init__.py">
       <provider selected="true" editor-type-id="text-editor">
         <state>
@@ -688,13 +730,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state>
           <caret column="11" selection-start-column="11" selection-end-column="11" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/install.bat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state>
-          <caret line="22" selection-start-line="22" selection-end-line="22" />
         </state>
       </provider>
     </entry>
@@ -757,10 +792,38 @@
     <entry file="file://$PROJECT_DIR$/ip_address_functions.py">
       <provider selected="true" editor-type-id="text-editor" />
     </entry>
+    <entry file="file://$PROJECT_DIR$/install.bat">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="85">
+          <caret line="5" column="82" selection-start-line="5" selection-start-column="82" selection-end-line="5" selection-end-column="82" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/create_paths.csv">
+      <provider editor-type-id="csv-table-editor">
+        <state showInfoPanel="true" fixedHeaders="false" rowLines="3" />
+      </provider>
+      <provider selected="true" editor-type-id="csv-text-editor" />
+      <provider editor-type-id="text-editor" />
+    </entry>
+    <entry file="file://$APPLICATION_HOME_DIR$/helpers/pydev/_pydev_imps/_pydev_execfile.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="289">
+          <caret line="17" selection-start-line="17" selection-end-line="17" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$USER_HOME$/AppData/Local/Programs/Python/Python37/Lib/codecs.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="192">
+          <caret line="309" selection-start-line="309" selection-end-line="309" />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/pathview.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="182">
-          <caret line="313" column="25" selection-start-line="313" selection-start-column="25" selection-end-line="313" selection-end-column="25" />
+        <state relative-caret-position="193">
+          <caret line="315" column="45" selection-start-line="315" selection-start-column="45" selection-end-line="315" selection-end-column="45" />
           <folding>
             <element signature="e#830#870#0" expanded="true" />
           </folding>
@@ -769,8 +832,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/pathview_api_functions.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-22">
-          <caret line="49" column="8" selection-start-line="49" selection-start-column="8" selection-end-line="49" selection-end-column="8" />
+        <state relative-caret-position="363">
+          <caret line="1024" column="34" lean-forward="true" selection-start-line="1024" selection-start-column="34" selection-end-line="1024" selection-end-column="34" />
           <folding>
             <element signature="e#0#48#0" expanded="true" />
             <element signature="e#623#793#0" />

@@ -68,8 +68,11 @@ def menu(options, org):
     print('\n')
     print('Org:', org)
     print('Path count: ', len(org.path_set))
-    for key in sorted(options):
-        print(key + ':', options[key][0])
+    list1 = options.keys()
+    list1 = [int(x) for x in list1]
+    list1.sort()
+    for item in list1:
+        print(str(item) + ':', options[str(item)][0])
 
 
 def choose_csv():
@@ -233,7 +236,8 @@ options = {
     '6': ['Create Paths'],
     '7': ['Find paths with QoS Changes'],
     '8': ['Show status of appliances'],
-    '9': ['Show paths using a specific Alert Profile']
+    '9': ['Show paths using a specific Alert Profile'],
+    '10': ['Show paths belonging to a specific Group']
 }
 
 
@@ -299,6 +303,37 @@ def paths_by_alert(org):
             start = 1
             pv.list_and_choose_path(message, path_list, window_param=(1, 'day'))
 
+def paths_by_group(org):
+    all_paths = org.get_path_set()
+    groups = org.get_groups()
+    print('Paths in this org are using the following groups')
+    print('Choose a group to get a list of paths using that group')
+    group_dict = {}
+    for path in all_paths:
+        if path.group in group_dict:
+            group_dict[path.group] = (group_dict[path.group][0] + 1, group_dict[path.group][1] + [path])
+        else:
+            group_dict[path.group] = (1,[path])
+    while True:
+        fmt = '\n{0:5s}{1:37s}{2:10s}'
+        print(fmt.format('   #', ' Group', 'Path Count'))
+        fmt = '{0:4d}  {1:37s}{2:3d}'
+        item_count = 0
+        group_keys = list(group_dict.keys())
+        group_keys.sort()
+        for group in group_keys:
+            item_count += 1
+            print(fmt.format(item_count, group, group_dict[group][0]))
+        print()
+        choice = input('Choose group to list paths, 0 to exit: ').rstrip()
+        if choice in ['0', '', 'n']:
+            return
+        elif int(choice) <= len(group_keys):
+            id = int(choice)-1
+            message = '\nPaths in group ' + group_keys[id] + ':'
+            pv.list_and_choose_path(message, group_dict[group_keys[id]][1], window_param=(1, 'day'))
+
+
 def find_appliance_connection_status(org):
     appl_list = org.get_appliances()
     fmt = '{0:30s}{1:10s}'
@@ -353,3 +388,5 @@ while True:
         find_appliance_connection_status(org)
     if choice == '9':
         paths_by_alert(org)
+    if choice == '10':
+        paths_by_group(org)

@@ -1,7 +1,7 @@
 #/bin/python
 
 from subprocess import check_call
-from Tkinter import *
+from tkinter import *
 
 def callH(dialstring, calltime):
     master.destroy()

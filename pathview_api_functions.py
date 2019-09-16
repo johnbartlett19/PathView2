@@ -44,6 +44,9 @@ class Org():
     def __repr__(self):
         return self.name
 
+    def __lt__(self, other):
+        return self.name < other.name
+
     def init_path_set(self):
         """
         Pull info from this org on all paths and create a list of path objects self.path_set
@@ -80,12 +83,12 @@ class Org():
         c_path_http =  http.request('POST', url, headers=headers, body=json.dumps(path_dict))
         if c_path_http.status > 399:
             http_data = json.loads(c_path_http.data)
-            print path_dict['pathName'] + ': ' + http_data['messages'][0]
+            print(path_dict['pathName'] + ': ' + http_data['messages'][0])
             return False
         # elif c_path_data.reason == 'Created':
-        #     print path_dict['pathName'] + ': ' + c_path_http.reason
+        #     print(path_dict['pathName'] + ': ' + c_path_http.reason)
         else:
-            print path_dict['pathName'] + ': Created'
+            print(path_dict['pathName'] + ': Created')
             c_path_data = json.loads(c_path_http.data)
             c_path = Path(self, c_path_data)
             self.path_set.append(c_path)
@@ -162,7 +165,7 @@ class Org():
         def open_diags(org, deep_link):
             linkDict = parse_deep_link(deep_link)
             path = self.path_by_id(linkDict['pathid'])
-            diags = path.find_diags(int(linkDict['startDate'])/1000, int(linkDict['endDate'])/1000)
+            diags = path.find_diags(int(int(linkDict['startDate'])/1000), int(int(linkDict['endDate'])/1000))
             for diag in diags:
                 url = create_url_diag(org.creds.pvc, org.id, diag.id, tab='data')
                 open_web(url)
@@ -203,7 +206,7 @@ class Org():
                     if ip_decimal > subnet.base and ip_decimal < subnet.top:
                         return True
                 except:
-                    print 'Can not evaulate dest address ' + ipaddr + ' , ignoring path.'
+                    print('Can not evaulate dest address ' + ipaddr + ' , ignoring path.')
                     return False
             else:
                 if ip_needed == ipaddr:
@@ -211,7 +214,7 @@ class Org():
             return False
 
         #Query user for IP address
-        ip_needed = raw_input('Target IP address? ').rstrip()
+        ip_needed = input('Target IP address? ').rstrip()
         paths = self.get_path_set()
         #Search thru looking for this IP address or subnet range in target
         paths2 = []
@@ -236,17 +239,17 @@ class Org():
         # Sort paths into list and print for user
         paths3 = sorted(paths2, key=lambda k: k.pathName)
         if len(paths3) == 0:
-            print 'No matching path found'
+            print('No matching path found')
         else:
             pathNum = 0
-            print
+            print()
             for path in paths3:
                 pathNum += 1
-                print str(pathNum) + '\t' + path.pathName + '\t' + path.target_ip
+                print(str(pathNum) + '\t' + path.pathName + '\t' + path.target_ip)
             pathChoice = True
             while pathChoice:
-                print
-                pathChoice = raw_input('Open which path? ').rstrip()
+                print()
+                pathChoice = input('Open which path? ').rstrip()
                 try:
                     pathCh = int(pathChoice)
                     if pathCh <= pathNum:
@@ -268,9 +271,9 @@ class Org():
         paths = []
         for path in self.path_set:
             if path.dict['disabled']:
-                print 'Path ' + path.pathName + ' is disabled'
+                print('Path ' + path.pathName + ' is disabled')
                 continue
-            print 'Pulling stats on ' + path.pathName
+            print('Pulling stats on ' + path.pathName)
             perf_params = path.get_path_param()
             if perf_params:
                 for minute in perf_params['data'][measure]:
@@ -301,7 +304,7 @@ class Org():
         for path in paths:
             if not path.dict['disabled']:
                 id_list.append(('pathIds',path.id))
-        path_requests = urllib.urlencode(id_list)
+        path_requests = urllib.parse.urlencode(id_list)
         url = 'pvc-data/v2/path/data' + '?' + path_requests
         req = pathview_http('GET', url, self.creds, bucket=self.bucket)
         data = json.loads(req.data)
@@ -355,11 +358,15 @@ class Org():
 
 class Org_list():
     def __init__(self, creds):
-        org_http = pathview_http('GET', 'pvc-data/v2/organization', creds)
+        headers = {'key':'v3'}
+        org_http = pathview_http('GET', 'api/v3/organization', creds, fields=headers)
         org_data = json.loads(org_http.data)
         self.org_list = []
         for org_dict in org_data:
                 self.org_list.append(Org(org_dict, creds))
+
+        # https://app-02.pm.appneta.com/api/v3/organization?api_key=v3
+        # https://deloitteusasso.pm.appneta.com/api/v3/organization?api_key=v3
 
 class Appliance():
     """
@@ -432,7 +439,7 @@ class Path():
                 except:
                     try_count -= 1
                     if try_count == 0:
-                        print'*** Unable to pull data for path ' + self.pathName + ' ***'
+                        print('*** Unable to pull data for path ' + self.pathName + ' ***')
                         return False
         return self.parameters
 
@@ -465,7 +472,7 @@ class Path():
         payload = {'pathId':self.id,'from':start,'to':end}
         if limit != None:
             payload['limit'] = limit
-        diag_http = pathview_http('GET', 'pvc-data/v2/diagnostic', self.org.creds, bucket=self.org.bucket, fields=payload)
+        diag_http = pathview_http('GET', 'pvc-data/v3/diagnostic', self.org.creds, bucket=self.org.bucket, fields=payload)
         if diag_http.data == '' or diag_http.data == '[]':
             return False
         diag_dicts = json.loads(diag_http.data)
@@ -546,12 +553,12 @@ class Path():
         start = now - days_history*24*3600
         # Pull most recent diagnostic
         diag_list = self.find_diags(start, now, limit=fetch_count)
-        if diag_list == False:
-            print '*** For path ' + self.pathName + ' no diagnostic available within 60 days ***'
+        if len(diag_list) == 0:
+            print('*** For path ' + self.pathName + ' no diagnostic available within 60 days ***')
             self.qos_found_diag = False
             return False
         diag = diag_list[0]
-        print 'For path ' + self.pathName + ' found diag that started at ' + time_to_str(diag.startTime) + ' UTC'
+        print('For path ' + self.pathName + ' found diag that started at ' + time_to_str(diag.startTime) + ' UTC')
         '''
         Now pull diag statistics and determine qos change information
         '''
@@ -562,10 +569,10 @@ class Path():
             if details == False:
                 using_diag += 1
                 if using_diag == fetch_count or using_diag == len(diag_list):
-                    print '*** Unable to find good diag within latest ' + str(fetch_count) + ' diags on path ' + self.pathName + ' ***'
+                    print('*** Unable to find good diag within latest ' + str(fetch_count) + ' diags on path ' + self.pathName + ' ***')
                     self.qos_found_diag = False
                     return False
-                print '*** Unable to pull stats on diag for ' + self.pathName + ' evaluating previous diag ***'
+                print('*** Unable to pull stats on diag for ' + self.pathName + ' evaluating previous diag ***')
                 diag = diag_list[using_diag]
         self.qos_found_diag = True
         hop_count = len(details)
@@ -728,17 +735,17 @@ def pathview_http(action, url, creds, bucket=None, fields={}, body=''):
         return http_resp
     except requests.exceptions.Timeout:
         # Maybe set up for a retry, or continue in a retry loop
-        print 'Network timeout, what is going on?'
+        print('Network timeout, what is going on?')
         sys.exit(1)
     except urllib3.exceptions.SSLError as e:
         asdf = 1
     except requests.exceptions.TooManyRedirects:
         # Tell the user their URL was bad and try a different one
-        print'Bad URL, try another?'
+        print('Bad URL, try another?')
         sys.exit(1)
     except requests.exceptions.RequestException as e:
         # catastrophic error. bail.
-        print e
+        print(e)
         sys.exit(1)
 
 def form_url(base, args):
@@ -839,11 +846,11 @@ def unix_time(dt):
 def time_to_str(date_time_value):
     if type(date_time_value) is str:
         date_time_value = int(str)
-    if type(date_time_value) is long:
+    if type(date_time_value) is int:  #was is long:
         if date_time_value > 10^12:
             date_time_value = date_time_value / 1000
         time_dt = datetime.datetime.fromtimestamp(date_time_value)
-        # print(datetime.datetime.fromtimestamp(int("1284101485")).strftime('%Y-%m-%d %H:%M:%S'))
+        # print(datetime.datetime.fromtimestamp(int("1284101485")).strftime('%Y-%m-%d %H:%M:%S')))
     elif (type(date_time_value) is datetime.datetime):
         time_dt = time
     else:
@@ -874,7 +881,7 @@ def parse_deep_link(deep_link):
 
 
 def get_start_end():
-    deep_link = raw_input('Deep link: ')
+    deep_link = input('Deep link: ')
     link_dict = parse_deep_link(deep_link)
     return (link_dict['startDate'],link_dict['endDate'])
 
@@ -991,14 +998,14 @@ def list_and_choose_path(description, path_list, window_param=None):
     if window_param:
         start, end = view_window(window_param)
     pathNum = 0
-    print
-    print description
-    print
+    print()
+    print(description)
+    print()
     for path in path_list:
         pathNum += 1
-        print str(pathNum) + '\t' + path.pathName
+        print(str(pathNum) + '\t' + path.pathName)
     while True:
-        path_choice = raw_input('Open a path? ').rstrip()
+        path_choice = input('Open a path? ').rstrip()
         if path_choice.lower() in ['q', '', '0', 'quit']:
             break
 

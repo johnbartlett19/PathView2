@@ -12,17 +12,11 @@ can start in idle window but need to call with python otherwise modules can't be
 try:  python -m idle.py -r pathview.py
 '''
 
-'''
-Hi John,
-I wanted to chime in to let you know that when retrieving data from multiple paths and specifying a to and from time you're going to want to put the time in milliseconds. I know this is not consistent with pulling data from a single path and our dev team is looking to correct that.
-Let us know if you have any other questions.
-Shaun
-'''
-import pathview_api_functions as pv, ip_address_functions as ip, time, csv
+import pathview_api_functions as pv, csv
 import glob
 
 def choose_org():
-    find_org = raw_input('Fragment of organization name? ').lower().rstrip()
+    find_org = input('Fragment of organization name? ').lower().rstrip()
     # search org list here for org name.  None is an OK answer
     possible = []
     for org in org_set:
@@ -33,14 +27,14 @@ def choose_org():
     if len(possible_sorted) == 1:
         return possible_sorted[0]
     elif len(possible_sorted) == 0:
-        print '*** Org not found in org list ***'
+        print('*** Org not found in org list ***')
         return None
     else:
         while(True):
             for org in possible_sorted:
                 count += 1
-                print count, org.name
-            index = raw_input('Which org to use? ')
+                print(count, org.name)
+            index = input('Which org to use? ')
             if index in ['0','','exit']:
                 return None
             try:
@@ -48,7 +42,7 @@ def choose_org():
                 if index <= len(possible_sorted) and index > 0:
                     return possible_sorted[index-1]
                 else:
-                    print '*** Number not found in possible org list ***'
+                    print('*** Number not found in possible org list ***')
             except:
                 pass
 
@@ -60,7 +54,7 @@ def choose_path(org):
     @param org:
     @return: none
     """
-    partial_name = raw_input('Partial path name? ').rstrip()
+    partial_name = input('Partial path name? ').rstrip()
     # filter = {'name':'*' + partial_name.lower() + '*'}
     path_list = org.get_path_set()
     paths_unsorted = []
@@ -71,11 +65,11 @@ def choose_path(org):
 
 
 def menu(options, org):
-    print '\n'
-    print 'Org:', org
-    print 'Path count: ', len(org.path_set)
+    print('\n')
+    print('Org:', org)
+    print('Path count: ', len(org.path_set))
     for key in sorted(options):
-        print key + ':', options[key][0]
+        print(key + ':', options[key][0])
 
 
 def choose_csv():
@@ -83,17 +77,17 @@ def choose_csv():
     Show csv files in local directory, user chooses by number
     @return: filename as text string
     """
-    # choice = raw_input('\nName of input file? ').strip()
+    # choice = input('\nName of input file? ').strip()
     csv_list = glob.glob("./*.csv")
     while True:
         if len(csv_list) > 0:
             file_num = 0
             for csv_file_name in csv_list:
                 file_num += 1
-                print str(file_num) + '\t' + csv_file_name
+                print(str(file_num) + '\t' + csv_file_name)
             file_choice = True
             while file_choice:
-                file_choice = raw_input('Open which file? ').rstrip()
+                file_choice = input('Open which file? ').rstrip()
                 if file_choice == 'q' or file_choice == 'Q' or file_choice == '' or file_choice == '0':
                     break
                 try:
@@ -151,13 +145,13 @@ def create_paths(org):
             row_count += 1
             ''' create dict using names from in_fields and values from row '''
             if row[0] == '':
-                print 'Input file row ' + str(row_count) + ' has no value in Org field, skipping'
+                print('Input file row ' + str(row_count) + ' has no value in Org field, skipping')
                 continue
             path_dict = {}
             item_num = 0
-            if len(in_fields) <> len(row):
+            if len(in_fields) != len(row):
                 raise ValueError ('Length of file row does not match expected fields length')
-            elif row[0] <> 'Org':
+            elif row[0] != 'Org':
                 for item in row:
                     path_dict[in_fields[item_num]] = item
                     item_num += 1
@@ -186,7 +180,7 @@ def create_paths(org):
                 path_dict['alertProfileId'] = profile.id
                 org.create_path(path_dict)
     except ValueError as e:
-        print e
+        print(e)
     except:
         raise
 
@@ -199,13 +193,13 @@ def find_qos_violations(org):
     """
     #TODO - don't count intermediate hops where QoS is listed as '-'
     qos_path_list, path_no_diag = org.find_paths_qos()
-    print 'Found ' + str(len(qos_path_list)) + ' paths with QoS violations'
-    print 'Found ' + str(len(path_no_diag)) + ' paths with no available diagnostic'
+    print('Found ' + str(len(qos_path_list)) + ' paths with QoS violations')
+    print('Found ' + str(len(path_no_diag)) + ' paths with no available diagnostic')
     while True:
-        print
-        print_query = raw_input('Show qos or show no_diag [qos | diag]? ').rstrip()
+        print()
+        print_query = input('Show qos or show no_diag [qos | diag]? ').rstrip()
         if print_query.lower() in ['qos', 'y', 'yes']:
-            last_hop = raw_input('Include paths with QoS violation on last hop only? ').rstrip()
+            last_hop = input('Include paths with QoS violation on last hop only? ').rstrip()
             if last_hop.lower() in ['y', 'yes']:
                 pv.list_and_choose_path('QoS Violation List including last hop', qos_path_list, window_param=(1,'day'))
             else:
@@ -245,7 +239,7 @@ options = {
 
 txt_files = glob.glob("./*.txt")
 if ".\\user.txt" in txt_files:
-    user_file = open ("./user.txt", 'rb')
+    user_file = open ("./user.txt", 'r')
     for row in user_file:
         id, value = row.split(": ")
         value = value.rstrip()
@@ -256,9 +250,9 @@ if ".\\user.txt" in txt_files:
         elif id == 'pvc':
             pvc = value
 else:
-    pvc = raw_input("PathView Cloud Address? (inc. https://... ").rstrip()
-    user = raw_input("PathView user name? ").rstrip()
-    password = raw_input("PathView password? ").rstrip()
+    pvc = input("PathView Cloud Address? (inc. https://... ").rstrip()
+    user = input("PathView user name? ").rstrip()
+    password = input("PathView password? ").rstrip()
 
 
 def change_org():
@@ -271,8 +265,8 @@ def change_org():
 def paths_by_alert(org):
     all_paths = org.get_path_set()
     alerts = org.get_alert_set()
-    print 'Paths in this org are using the following alerts'
-    print 'Choose an alert to get a list of paths using that alert'
+    print('Paths in this org are using the following alerts')
+    print('Choose an alert to get a list of paths using that alert')
     alert_dict = {}
     for path in all_paths:
         if path.alertProfileId in alert_dict:
@@ -283,16 +277,16 @@ def paths_by_alert(org):
         alert_dict[profId].append(alerts.find_by_id(profId))
     while True:
         fmt = '\n{0:5s}{1:37s}{2:10s}'
-        print fmt.format('   #', ' Profile', 'Path Count')
+        print(fmt.format('   #', ' Profile', 'Path Count'))
         fmt = '{0:4d}  {1:37s}{2:3d}'
         item_count = 0
         alert_list = []
         for profId in alert_dict:
             item_count += 1
-            print fmt.format(item_count, alert_dict[profId][1].name, alert_dict[profId][0])
+            print(fmt.format(item_count, alert_dict[profId][1].name, alert_dict[profId][0]))
             alert_list.append(profId)
-        print
-        choice = raw_input('Choose alert to list paths, 0 to exit: ').rstrip()
+        print()
+        choice = input('Choose alert to list paths, 0 to exit: ').rstrip()
         if choice in ['0', '', 'n']:
             return
         elif int(choice) <= len(alert_list):
@@ -308,9 +302,9 @@ def paths_by_alert(org):
 def find_appliance_connection_status(org):
     appl_list = org.get_appliances()
     fmt = '{0:30s}{1:10s}'
-    print fmt.format('Appliance', 'Status')
+    print(fmt.format('Appliance', 'Status'))
     for appl in appl_list:
-        print fmt.format(appl.name, appl.conn_stat)
+        print(fmt.format(appl.name, appl.conn_stat))
 
 def find_paths_by_loss(org):
     # path_param_exceeds(self, measure, threshold, start=int(time.time())-60*60, end=int(time.time())):
@@ -330,15 +324,15 @@ creds = pv.Credentials(pvc, user, password)
 global org_set
 org_set = pv.Org_list(creds).org_list
 
-print
+print()
 org = None
 while not org:
     org = change_org()
     if not org:
-        print '*** No org with that name found, please select another ***'
+        print('*** No org with that name found, please select another ***')
 while True:
     menu(options, org)
-    choice = raw_input('\nChoice? ').strip()
+    choice = input('\nChoice? ').strip()
     if choice == '0':
         break
     if choice == '1':
